@@ -1,0 +1,2065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Territory Journey Planner</title>
+  <style>* { box-sizing: border-box; margin: 0; padding: 0; } body { background: #0F1923; color: #e2e8f0; font-family: Segoe UI, system-ui, sans-serif; } #root { min-height: 100vh; }</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel">
+const { useState, useRef } = React;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+const MONTH_NAMES = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+
+const TC = {
+  A:{bg:"#0d4f2e",text:"#4ade80",border:"#16a34a"},
+  B:{bg:"#1e3a5f",text:"#60a5fa",border:"#2563eb"},
+  C:{bg:"#4a2c0a",text:"#fb923c",border:"#ea580c"},
+  D:{bg:"#3a1010",text:"#fca5a5",border:"#991b1b"},
+};
+
+// Major TFL transport hubs with coords — used for soft landing scoring
+const TRANSPORT_HUBS = [
+  [51.5655,-0.1033], // Finsbury Park
+  [51.5501,-0.1025], // Highbury & Islington
+  [51.5362,-0.1026], // Angel
+  [51.5228,-0.1119], // Kings Cross
+  [51.5217,-0.0776], // Old Street
+  [51.5308,-0.1238], // Euston
+  [51.5432,-0.1926], // Kilburn
+  [51.5501,-0.1756], // Swiss Cottage
+  [51.5541,-0.1683], // Hampstead
+  [51.5306,-0.1709], // St John's Wood
+  [51.5336,-0.1452], // Camden Town
+  [51.5896,-0.2136], // Hendon Central
+  [51.5927,-0.2587], // Kingsbury
+  [51.5870,-0.1181], // Hornsey / Crouch End
+  [51.5934,-0.1430], // Muswell Hill
+  [51.5150,-0.1878], // Paddington
+  [51.5138,-0.2067], // Notting Hill Gate
+  [51.5203,-0.2175], // Ladbroke Grove
+  [51.5140,-0.3006], // Ealing Broadway
+];
+
+const PC_COORDS = {
+  "EN1":[51.6524,-0.0677],"EN2":[51.6519,-0.0825],"EN3":[51.6633,-0.0289],
+  "EN4":[51.6474,-0.1596],"EN5":[51.6478,-0.1869],"EN6":[51.7025,-0.1833],
+  "EN7":[51.6956,-0.0613],"EN8":[51.7078,-0.0274],"EN9":[51.7300,-0.0097],
+  "EN10":[51.7450,-0.0149],"EN11":[51.7615,-0.0040],
+  "N1":[51.5362,-0.1026],"N2":[51.5876,-0.1644],"N3":[51.5980,-0.1927],
+  "N4":[51.5708,-0.1034],"N5":[51.5554,-0.0993],"N6":[51.5678,-0.1494],
+  "N7":[51.5502,-0.1174],"N8":[51.5870,-0.1181],"N9":[51.6247,-0.0573],
+  "N10":[51.5934,-0.1430],"N11":[51.6101,-0.1538],"N12":[51.6094,-0.1763],
+  "N13":[51.6264,-0.1023],"N14":[51.6375,-0.1068],"N15":[51.5832,-0.0726],
+  "N16":[51.5617,-0.0762],"N17":[51.5978,-0.0680],"N18":[51.6126,-0.0640],
+  "N19":[51.5653,-0.1284],"N20":[51.6282,-0.1804],"N21":[51.6360,-0.0936],
+  "N22":[51.6001,-0.1107],
+  "NW1":[51.5336,-0.1452],"NW2":[51.5582,-0.2190],"NW3":[51.5541,-0.1683],
+  "NW4":[51.5896,-0.2136],"NW5":[51.5537,-0.1401],"NW6":[51.5432,-0.1926],
+  "NW7":[51.6158,-0.2266],"NW8":[51.5306,-0.1709],"NW9":[51.5927,-0.2587],
+  "NW10":[51.5488,-0.2579],"NW11":[51.5768,-0.1934],
+  "E1":[51.5150,-0.0700],"E2":[51.5285,-0.0590],
+  "EC1":[51.5237,-0.1023],"EC2":[51.5178,-0.0921],
+  "WC1":[51.5216,-0.1175],"WC2":[51.5120,-0.1245],
+  "W1":[51.5148,-0.1437],"W2":[51.5150,-0.1878],"W4":[51.4886,-0.2656],
+  "W5":[51.5140,-0.3006],"W8":[51.5014,-0.1963],"W9":[51.5225,-0.1836],
+  "W10":[51.5203,-0.2175],"W11":[51.5138,-0.2067],
+  "SW1":[51.5009,-0.1353],"SW11":[51.4628,-0.1659],
+  "HP":[51.8168,-0.8093],
+};
+
+const EXAMPLE_STORES = [
+  "WIS102:PET104 | Petter Pharmacy | N8 8DT | A",
+  "AMY101 | Amy Pharmacy | N8 8SY | B",
+  "REE102 | Reena Pharmacy | N8 8AA | B",
+  "HAR160 | Harvest N8 | N8 9BT | B",
+  "COR103 | Coral Pharmacy | N8 8LA | A",
+  "HAE101 | Haelan Centre | N8 8DT | A",
+  "BRO144 | Broadway Pharmacy | N10 3RS | A",
+  "MUS101 | Muswell Hill Pharmacy | N10 3HN | B",
+  "DUK101 | Dukes Pharmacy | N10 1DJ | B",
+  "AND105 | C W Andrew | N2 9PJ | A",
+  "OAK101 | Oakdale Pharmacy | N2 8AQ | B",
+  "NUC105 | Nuchem Pharmaceuticals | N4 3PZ | A",
+  "MED131 | Med-Chem Pharmacy | N4 1DU | A",
+  "PAR119 | Parade Chemist | N4 1LG | B",
+  "OLI107 | Olive and Green | N16 5HT | A",
+  "FOO110 | Food For All | N16 6PA | B",
+  "HAR198 | Harvest N16 | N16 7JL | B",
+  "CLA108 | Clan Pharmacy | N1 1RA | A",
+  "WHO117:WHO129 | Whole Foods Angel | N1 0PD | A",
+  "JOH101 | St Johns Wood Pharmacy | NW8 7SE | A",
+  "LAN103 | Landys Chemist | NW11 0AA | A",
+  "PLA106:PLA130 | Planet Organic Hampstead | NW3 1PR | A",
+  "RIT103 | Ritz Pharmacy | NW3 6UA | A",
+  "HYP101 | Hyperchem Pharmacy | NW6 6NL | A",
+  "CAL123 | Caledonian Pharmacy | N7 9RP | A",
+  "EAR108 | Earth Natural Foods | NW5 2AE | A",
+  "WHO117:WHO120 | Whole Foods Camden | NW1 7PN | A",
+  "NAP101:WAR108 | Warwick Pharmacy | N11 2EU | A",
+  "GRE212 | Green Lanes Pharmacy | N21 2SA | B",
+  "HAM102 | Hampstead Heath Pharmacy | NW3 2PY | C",
+].join("\n");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GEO HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function getCoords(postcode) {
+  var d = (postcode || "").trim().toUpperCase().split(" ")[0];
+  return PC_COORDS[d] || PC_COORDS[d.replace(/\d+$/, "")] || [51.5074, -0.1278];
+}
+function getDistrict(postcode) {
+  return (postcode || "").trim().toUpperCase().split(" ")[0];
+}
+function distKm(lat1, lng1, lat2, lng2) {
+  var R = 6371;
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLng = (lng2 - lng1) * Math.PI / 180;
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function estimateMins(lat1, lng1, lat2, lng2) {
+  var km = distKm(lat1, lng1, lat2, lng2);
+  return km < 0.6 ? Math.round(km * 12) : Math.round(10 + km * 3.5);
+}
+function travelMode(lat1, lng1, lat2, lng2) {
+  var km = distKm(lat1, lng1, lat2, lng2);
+  return km < 0.6 ? "🚶 Walk" : km < 2.5 ? "🚌 Bus" : "🚇 Tube/Bus";
+}
+function fmtTime(m) {
+  return String(Math.floor(m / 60)).padStart(2,"0") + ":" + String(m % 60).padStart(2,"0");
+}
+
+// Zones further than this from home are treated as "drive zones" — visited first by car,
+// then the rep returns home before continuing on public transport
+var DRIVE_ZONE_KM = 25;
+
+function isDriveStore(postcode, hLat, hLng) {
+  var c = getCoords(postcode);
+  return distKm(hLat, hLng, c[0], c[1]) > DRIVE_ZONE_KM;
+}
+
+// Drive time estimate: ~50km/h average inc traffic lights
+function driveTimeMins(lat1, lng1, lat2, lng2) {
+  var km = distKm(lat1, lng1, lat2, lng2);
+  return Math.round(km / 50 * 60);
+}
+
+// Score how close a location is to the nearest transport hub
+function hubScore(lat, lng) {
+  var best = Infinity;
+  for (var i = 0; i < TRANSPORT_HUBS.length; i++) {
+    var d = distKm(lat, lng, TRANSPORT_HUBS[i][0], TRANSPORT_HUBS[i][1]);
+    if (d < best) best = d;
+  }
+  return best; // lower = better (closer to a hub)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALENDAR
+// ─────────────────────────────────────────────────────────────────────────────
+function parseMonthString(text) {
+  var t = (text || "").trim().toLowerCase();
+  for (var i = 0; i < MONTH_NAMES.length; i++) {
+    if (t.indexOf(MONTH_NAMES[i].slice(0,3)) >= 0) {
+      var ym = t.match(/\d{4}/);
+      return { year: ym ? parseInt(ym[0]) : new Date().getFullYear(), month: i };
+    }
+  }
+  var m = t.match(/^(\d{1,2})[\/\-](\d{4})$/);
+  if (m) return { year: parseInt(m[2]), month: parseInt(m[1])-1 };
+  m = t.match(/^(\d{4})[\/\-](\d{1,2})$/);
+  if (m) return { year: parseInt(m[1]), month: parseInt(m[2])-1 };
+  return null;
+}
+
+function buildCalendarWeeks(year, month) {
+  var days = [], d = new Date(year, month, 1), last = new Date(year, month+1, 0);
+  while (d <= last) {
+    var dow = d.getDay();
+    if (dow >= 1 && dow <= 5) {
+      days.push({
+        date: new Date(d),
+        dayName: DAYS[dow-1],
+        label: DAYS[dow-1] + " " + d.getDate() + "/" + (month+1),
+        dateKey: d.toISOString().slice(0,10),
+      });
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  var weeks = [], cur = [];
+  for (var i = 0; i < days.length; i++) {
+    if (days[i].dayName === "Monday" && cur.length > 0) { weeks.push(cur); cur = []; }
+    cur.push(days[i]);
+  }
+  if (cur.length) weeks.push(cur);
+  return weeks;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TIER ROTATION
+// A = every month (all A stores each month)
+// B = every 6 weeks (~2 visits per quarter) — alternate halves by month parity
+// C = every 2 months — alternate halves by month parity
+// ─────────────────────────────────────────────────────────────────────────────
+function filterByRotation(stores, monthIndex) {
+  // A + B: always included every month — no rotation
+  // C: rotate in halves every 2 months
+  // D: rotate in halves every 2 months (same as C)
+  var result = [];
+  for (var i = 0; i < stores.length; i++) {
+    var s = stores[i];
+    if (s.tier === "A" || s.tier === "B") {
+      // A and B stores are always included — no rotation
+      result.push(s);
+    } else if (s.tier === "C" || s.tier === "D") {
+      // C and D rotate in halves every 2 months
+      var halfIdx = i % 2;
+      var monthParity = monthIndex % 2;
+      if (halfIdx === monthParity) result.push(s);
+      else result.push(Object.assign({}, s, { _skipped: true }));
+    } else {
+      result.push(s);
+    }
+  }
+  return result.filter(function(s) { return !s._skipped; });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CORE ROUTING — ZONE-COMMITTED, ARC-BACK, SOFT LANDING
+// ─────────────────────────────────────────────────────────────────────────────
+// Natural travel corridors — districts that form a logical arc on the same bus/tube line.
+// Stores within a corridor are treated as one zone so the day stays tight.
+var CORRIDORS = [
+  ["EN10","EN9","EN8","EN7"],           // Lea Valley line north
+  ["EN3","EN1","N18","N9"],             // Lea Valley / Edmonton south
+  ["EN5","EN4","N20","N12"],            // Barnet / Whetstone / Friern Barnet
+  ["N22","N10","N8"],                   // Wood Green / Muswell Hill / Hornsey
+  ["N13","N11","N21"],                  // Palmers Green / Bounds Green / Winchmore Hill
+  ["N14","N21","EN1"],                  // Southgate / Winchmore Hill / Enfield
+  ["N3","NW11","NW4","NW2"],            // Finchley / Golders Green / Hendon
+  ["N2","N10","N3"],                    // East Finchley / Muswell Hill / Finchley
+  ["N4","N19","NW5"],                   // Finsbury Park / Archway / Kentish Town
+  ["N7","N1"],                          // Holloway / Islington
+  ["NW1","W1G","W1"],                   // Marylebone / Camden
+  ["NW8","W9","W2"],                    // St John's Wood / Maida Vale / Paddington
+  ["W11","W10","NW6"],                  // Notting Hill / Ladbroke Grove / Kilburn
+  ["W4","W5"],                          // Chiswick / Ealing
+  ["NW3","NW6"],                        // Hampstead / Kilburn
+];
+
+// Returns the corridor key for a district (first matching corridor, else the district itself)
+function corridorKey(district) {
+  for (var i = 0; i < CORRIDORS.length; i++) {
+    if (CORRIDORS[i].indexOf(district) >= 0) return CORRIDORS[i][0]; // use first district as key
+  }
+  return district;
+}
+
+function groupByDistrict(stores) {
+  // Group first by corridor, then by individual district within each corridor.
+  // This keeps stores on the same travel line together without forcing unrelated districts.
+  var g = {};
+  for (var i = 0; i < stores.length; i++) {
+    var d = getDistrict(stores[i].postcode);
+    var ck = corridorKey(d);
+    if (!g[ck]) g[ck] = [];
+    g[ck].push(stores[i]);
+  }
+
+  // Split any corridor group that spans more than ~4km into sub-groups
+  // so we don't create days that are too geographically spread
+  var result = [];
+  var keys = Object.keys(g);
+  for (var k = 0; k < keys.length; k++) {
+    var group = g[keys[k]];
+    if (group.length <= 1) { result.push(group); continue; }
+
+    // Check span of this corridor group
+    var cen = zoneCentroid(group);
+    var maxDist = 0;
+    for (var m = 0; m < group.length; m++) {
+      var c = getCoords(group[m].postcode);
+      var dd = distKm(cen[0], cen[1], c[0], c[1]);
+      if (dd > maxDist) maxDist = dd;
+    }
+
+    if (maxDist > 4.5) {
+      // Too spread — split back into individual districts
+      var subg = {};
+      for (var s = 0; s < group.length; s++) {
+        var sd = getDistrict(group[s].postcode);
+        if (!subg[sd]) subg[sd] = [];
+        subg[sd].push(group[s]);
+      }
+      Object.values(subg).forEach(function(sg) { result.push(sg); });
+    } else {
+      result.push(group);
+    }
+  }
+  return result;
+}
+
+function groupByRadius(stores, radiusKm) {
+  var assigned = new Array(stores.length).fill(-1);
+  var clusters = [];
+  for (var i = 0; i < stores.length; i++) {
+    if (assigned[i] >= 0) continue;
+    var ci = clusters.length;
+    clusters.push([i]);
+    assigned[i] = ci;
+    var c1 = getCoords(stores[i].postcode);
+    for (var j = i+1; j < stores.length; j++) {
+      if (assigned[j] >= 0) continue;
+      var c2 = getCoords(stores[j].postcode);
+      if (distKm(c1[0],c1[1],c2[0],c2[1]) <= radiusKm) { clusters[ci].push(j); assigned[j] = ci; }
+    }
+  }
+  return clusters.map(function(idx) { return idx.map(function(i) { return stores[i]; }); });
+}
+
+function zoneCentroid(zone) {
+  var lats = zone.map(function(s) { return getCoords(s.postcode)[0]; });
+  var lngs = zone.map(function(s) { return getCoords(s.postcode)[1]; });
+  var n = lats.length;
+  return [lats.reduce(function(a,b){return a+b;},0)/n, lngs.reduce(function(a,b){return a+b;},0)/n];
+}
+
+// Sequence stores within a zone: furthest first, arc back home, last stop near a hub
+function sequenceZone(stores, hLat, hLng) {
+  if (!stores.length) return [];
+  if (stores.length === 1) return stores.slice();
+
+  // Find furthest store from home — that's stop 1
+  var fi = 0, fd = 0;
+  for (var i = 0; i < stores.length; i++) {
+    var c = getCoords(stores[i].postcode);
+    var d = distKm(hLat, hLng, c[0], c[1]);
+    if (d > fd) { fd = d; fi = i; }
+  }
+
+  var remaining = stores.slice();
+  var first = remaining.splice(fi, 1)[0];
+  var result = [first];
+  var cc = getCoords(first.postcode);
+  var curLat = cc[0], curLng = cc[1];
+
+  // For intermediate stops: score by (distance to next) + homeward bias
+  // For the final stop: add hub proximity bonus so we finish near transport
+  while (remaining.length > 0) {
+    var isLast = remaining.length === 1;
+    var bestIdx = 0, bestScore = Infinity;
+    for (var j = 0; j < remaining.length; j++) {
+      var rc = getCoords(remaining[j].postcode);
+      var distToNext = distKm(curLat, curLng, rc[0], rc[1]);
+      var distToHome = distKm(rc[0], rc[1], hLat, hLng);
+      var hub = isLast ? hubScore(rc[0], rc[1]) * 0.8 : 0; // soft landing bonus on final stop
+      var score = distToNext + distToHome * 0.35 + hub;
+      if (score < bestScore) { bestScore = score; bestIdx = j; }
+    }
+    result.push(remaining[bestIdx]);
+    var nc = getCoords(remaining[bestIdx].postcode);
+    curLat = nc[0]; curLng = nc[1];
+    remaining.splice(bestIdx, 1);
+  }
+  return result;
+}
+
+// Build the full ordered pool:
+// 1. Group into zones (district or radius)
+// 2. Order zones: furthest from home first, then chain nearest-centroid back
+// 3. Sequence within each zone: furthest-first arc with soft landing on last stop
+function buildPool(stores, hLat, hLng, mode, radiusKm) {
+  if (!stores.length) return [];
+  var zones = mode === "district" ? groupByDistrict(stores) : groupByRadius(stores, radiusKm);
+  if (!zones.length) return [];
+
+  // Start at the furthest zone
+  var fi = 0, fd = 0;
+  for (var i = 0; i < zones.length; i++) {
+    var cen = zoneCentroid(zones[i]);
+    var d = distKm(hLat, hLng, cen[0], cen[1]);
+    if (d > fd) { fd = d; fi = i; }
+  }
+
+  // Chain remaining zones: nearest centroid with homeward bias (loop back)
+  // Priority: pick the next zone that is (a) geographically close to current position
+  // AND (b) on the arc back toward home. Never jump to a zone that breaks the arc.
+  var visited = new Array(zones.length).fill(false);
+  var ordered = [];
+  visited[fi] = true;
+  ordered.push(zones[fi]);
+  var lc = zoneCentroid(zones[fi]);
+  var curLat = lc[0], curLng = lc[1];
+  // Track distance to home from start of chain — we should be getting closer each step
+  var startDistToHome = distKm(lc[0], lc[1], hLat, hLng);
+
+  while (ordered.length < zones.length) {
+    var bi = -1, bs = Infinity;
+    var curDistToHome = distKm(curLat, curLng, hLat, hLng);
+    for (var j = 0; j < zones.length; j++) {
+      if (visited[j]) continue;
+      var zc = zoneCentroid(zones[j]);
+      var distToZone = distKm(curLat, curLng, zc[0], zc[1]);
+      var distToHome = distKm(zc[0], zc[1], hLat, hLng);
+      // Arc-back bias: strongly prefer zones that are closer to home than current position
+      // This enforces the "furthest first, arc back" principle at the zone level
+      var arcBonus = distToHome < curDistToHome ? 0 : distToHome * 0.6;
+      var score = distToZone + arcBonus;
+      if (score < bs) { bs = score; bi = j; }
+    }
+    if (bi < 0) break;
+    visited[bi] = true;
+    ordered.push(zones[bi]);
+    var nc = zoneCentroid(zones[bi]);
+    curLat = nc[0]; curLng = nc[1];
+  }
+
+  // Flatten: sequence each zone internally
+  var pool = [];
+  for (var k = 0; k < ordered.length; k++) {
+    var seq = sequenceZone(ordered[k], hLat, hLng);
+    for (var s = 0; s < seq.length; s++) pool.push(seq[s]);
+  }
+  return pool;
+}
+
+function buildTimetable(stores, visitMins, hLat, hLng) {
+  // Split stores into drive leg (far stores, >25km) and transit leg (close stores)
+  var driveStores = stores.filter(function(s) { return isDriveStore(s.postcode, hLat, hLng); });
+  var transitStores = stores.filter(function(s) { return !isDriveStore(s.postcode, hLat, hLng); });
+  var hasDriveLeg = driveStores.length > 0;
+
+  var slots = [];
+  var mins = 7 * 60 + 30; // Drive leg starts 07:30
+
+  // ── DRIVE LEG ─────────────────────────────────────────────────────────────
+  if (hasDriveLeg) {
+    var pLat = hLat, pLng = hLng;
+    // Sequence drive stores furthest first
+    var driveSeq = sequenceZone(driveStores, hLat, hLng);
+    for (var i = 0; i < driveSeq.length; i++) {
+      var s = driveSeq[i];
+      var c = getCoords(s.postcode);
+      var tm = driveTimeMins(pLat, pLng, c[0], c[1]);
+      mins += tm;
+      var arr = fmtTime(mins);
+      mins += visitMins;
+      slots.push(Object.assign({}, s, {
+        arriveTime: arr, leaveTime: fmtTime(mins),
+        travelMins: tm, travelMode: "🚗 Drive", isDriveLeg: true,
+      }));
+      pLat = c[0]; pLng = c[1];
+    }
+    // Drive back home
+    var returnDrive = driveTimeMins(pLat, pLng, hLat, hLng);
+    mins += returnDrive + 15; // +15 min buffer to park/freshen up
+    // Mark the return-home point in the first transit slot's pre-travel
+  }
+
+  // ── TRANSIT LEG ───────────────────────────────────────────────────────────
+  if (!hasDriveLeg) mins = 9 * 60; // normal start if no drive leg
+  var tLat = hLat, tLng = hLng;
+  var transitSeq = transitStores.length > 0 ? sequenceZone(transitStores, hLat, hLng) : [];
+  for (var j = 0; j < transitSeq.length; j++) {
+    var ts = transitSeq[j];
+    var tc = getCoords(ts.postcode);
+    var ttm = estimateMins(tLat, tLng, tc[0], tc[1]);
+    var tmode = travelMode(tLat, tLng, tc[0], tc[1]);
+    mins += ttm;
+    var tarr = fmtTime(mins);
+    mins += visitMins;
+    slots.push(Object.assign({}, ts, {
+      arriveTime: tarr, leaveTime: fmtTime(mins),
+      travelMins: ttm, travelMode: tmode, isDriveLeg: false,
+      isFirstTransit: j === 0 && hasDriveLeg, // flag to show "return home then depart again"
+    }));
+    tLat = tc[0]; tLng = tc[1];
+  }
+
+  var backTime = fmtTime(mins + estimateMins(tLat, tLng, hLat, hLng));
+  return { slots: slots, backTime: backTime, hasDriveLeg: hasDriveLeg };
+}
+
+// Build the full month plan
+// Key principle: allocate whole zones to days so no pinballing
+function buildMonthPlan(stores, perDay, visitMins, hLat, hLng, mode, radiusKm, calendarWeeks, blockedDates, monthIndex, storeAvailability) {
+  var blocked = {};
+  for (var b = 0; b < blockedDates.length; b++) blocked[blockedDates[b]] = true;
+
+  // Apply tier rotation first
+  var rotated = filterByRotation(stores, monthIndex);
+
+  // Dedupe again as safety net — catches any compound-code duplicates
+  var dedupedRotated = dedupeStores(rotated);
+
+  // Build full ordered pool with zone-committed routing
+  var rawPool = buildPool(dedupedRotated, hLat, hLng, mode, radiusKm);
+
+  // Final dedupe of the pool itself by store id — prevents any store appearing twice
+  var seenIds = {};
+  var orderedPool = [];
+  for (var pi = 0; pi < rawPool.length; pi++) {
+    if (!seenIds[rawPool[pi].id]) {
+      seenIds[rawPool[pi].id] = true;
+      orderedPool.push(rawPool[pi]);
+    }
+  }
+
+  var plan = [];
+  var poolIdx = 0;
+
+  for (var w = 0; w < calendarWeeks.length; w++) {
+    var weekDays = [];
+    for (var d = 0; d < calendarWeeks[w].length; d++) {
+      var di = calendarWeeks[w][d];
+      if (blocked[di.dateKey]) {
+        weekDays.push({ dayName: di.dayName, dateLabel: di.label, dateKey: di.dateKey, slots: [], backTime: "", blocked: true });
+        continue;
+      }
+      // Take this day's stores from the pool — these are already zone-ordered
+      // Build this day's pool respecting store availability restrictions
+      // First pass: collect stores available on this day
+      var sa = storeAvailability || {};
+      var available = [], deferred = [];
+      var searchFrom = poolIdx * perDay;
+      // Collect perDay stores from the pool that are available on this day
+      var dayStores = [];
+      var scanIdx = searchFrom;
+      while (dayStores.length < perDay && scanIdx < orderedPool.length) {
+        var candidate = orderedPool[scanIdx];
+        var avail = sa[candidate.id] ? sa[candidate.id].availDays || [] : [];
+        var okDay = avail.length === 0 || avail.indexOf(di.dayName) >= 0;
+        if (okDay) dayStores.push(candidate);
+        scanIdx++;
+      }
+      // If we couldn't fill the day from available stores, top up from the next slots anyway
+      if (dayStores.length < perDay) {
+        var dayPool = orderedPool.slice(poolIdx * perDay, (poolIdx + 1) * perDay);
+        // merge without duplicates
+        for (var si = 0; si < dayPool.length; si++) {
+          var alreadyIn = false;
+          for (var sj = 0; sj < dayStores.length; sj++) { if (dayStores[sj].id === dayPool[si].id) { alreadyIn = true; break; } }
+          if (!alreadyIn) dayStores.push(dayPool[si]);
+          if (dayStores.length >= perDay) break;
+        }
+      }
+      var optimised = dayStores.length > 0 ? sequenceZone(dayStores, hLat, hLng) : [];
+      var result = buildTimetable(optimised, visitMins, hLat, hLng);
+      weekDays.push({
+        dayName: di.dayName, dateLabel: di.label, dateKey: di.dateKey,
+        slots: result.slots, backTime: result.backTime,
+        hasDriveLeg: result.hasDriveLeg || false, blocked: false,
+      });
+      poolIdx++;
+    }
+    plan.push({ week: w + 1, days: weekDays });
+  }
+  return plan;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PARSING
+// ─────────────────────────────────────────────────────────────────────────────
+function dedupeStores(stores) {
+  // Dedupe by base store code — compound codes like "AAA101:BBB102" and "BBB102" are the same store.
+  // Extract the last segment after colon as the base code. Prefer compound (master) over simple.
+  var byBaseCode = {};
+  for (var i = 0; i < stores.length; i++) {
+    var s = stores[i];
+    var parts = s.code.split(":");
+    var baseCode = parts[parts.length - 1].toUpperCase().trim();
+    if (!byBaseCode[baseCode]) {
+      byBaseCode[baseCode] = s;
+    } else {
+      // Prefer compound code (master record) over simple
+      var existingIsCompound = byBaseCode[baseCode].code.indexOf(":") >= 0;
+      var newIsCompound = s.code.indexOf(":") >= 0;
+      if (newIsCompound && !existingIsCompound) {
+        byBaseCode[baseCode] = s;
+      }
+    }
+  }
+  // Also dedupe by store id to catch any remaining duplicates
+  var seenIds = {};
+  var result = [];
+  var vals = Object.values(byBaseCode);
+  for (var j = 0; j < vals.length; j++) {
+    if (!seenIds[vals[j].id]) {
+      seenIds[vals[j].id] = true;
+      result.push(vals[j]);
+    }
+  }
+  return result;
+}
+
+function parseStoreList(text) {
+  var lines = text.split("\n"), stores = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    var parts = line.split(/[|,\t]/).map(function(p) { return p.trim(); });
+    if (parts.length < 3 || !parts[2]) continue;
+    var rawTier = (parts[3] || "C").toUpperCase().charAt(0);
+    var tier = "ABCD".indexOf(rawTier) >= 0 ? rawTier : "C";
+    stores.push({ id: "s"+i, code: parts[0]||("S"+i), name: parts[1]||("Store "+i), postcode: parts[2], tier: tier });
+  }
+  return dedupeStores(stores);
+}
+
+function loadXLSX() {
+  return new Promise(function(res, rej) {
+    if (window.XLSX) { res(window.XLSX); return; }
+    var script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    script.onload = function() { res(window.XLSX); };
+    script.onerror = rej;
+    document.head.appendChild(script);
+  });
+}
+
+function parseUploadedFile(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = function(e) {
+      if (!/\.xlsx?$/i.test(file.name)) { resolve(parseStoreList(e.target.result)); return; }
+      loadXLSX().then(function(XLSX) {
+        var wb = XLSX.read(e.target.result, { type: "binary" });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+        var stores = [];
+        for (var i = 0; i < rows.length; i++) {
+          var r = rows[i];
+          if (i === 0 && ["code","store","name","account"].indexOf(String(r[0]||"").toLowerCase()) >= 0) continue;
+          var hasData = false;
+          for (var ci = 0; ci < r.length; ci++) { if (r[ci] !== "") { hasData = true; break; } }
+          if (!hasData) continue;
+          var rawTier = String(r[3]||"C").toUpperCase().charAt(0);
+          var tier = "ABCD".indexOf(rawTier) >= 0 ? rawTier : "C";
+          var pc = String(r[2]||"").trim();
+          if (!pc) continue;
+          stores.push({ id:"s"+i, code:String(r[0]||("S"+i)).trim(), name:String(r[1]||("Store"+i)).trim(), postcode:pc, tier:tier });
+        }
+        resolve(dedupeStores(stores));
+      }).catch(reject);
+    };
+    if (/\.xlsx?$/i.test(file.name)) reader.readAsBinaryString(file);
+    else reader.readAsText(file);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPORT — base64 data URI (works in sandboxed iframes)
+// ─────────────────────────────────────────────────────────────────────────────
+function exportToExcel(plan, repName, month) {
+  return loadXLSX().then(function(XLSX) {
+    var rows = [["Month","Week Number","Day","Store Code","Store Name","Postcode","Tier"]];
+    for (var w = 0; w < plan.length; w++) {
+      for (var d = 0; d < plan[w].days.length; d++) {
+        var day = plan[w].days[d];
+        if (day.blocked) continue;
+        for (var i = 0; i < day.slots.length; i++) {
+          var s = day.slots[i];
+          rows.push([month, "Week "+plan[w].week, day.dateLabel||day.dayName, s.code, s.name, s.postcode, s.tier]);
+        }
+      }
+    }
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"] = [{wch:14},{wch:12},{wch:18},{wch:18},{wch:34},{wch:12},{wch:6}];
+    XLSX.utils.book_append_sheet(wb, ws, "Journey Plan");
+    var b64 = XLSX.write(wb, { bookType:"xlsx", type:"base64" });
+    var filename = (repName||"Territory").replace(/[^a-z0-9]+/gi,"_")+"_"+(month||"Plan").replace(/[^a-z0-9]+/gi,"_")+"_Plan.xlsx";
+    var a = document.createElement("a");
+    a.href = "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+b64;
+    a.download = filename;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function() { document.body.removeChild(a); }, 1000);
+  });
+}
+
+function buildCopyText(plan, month) {
+  var rows = [["Month","Week","Day","Store Code","Store Name","Postcode","Tier"].join("\t")];
+  for (var w = 0; w < plan.length; w++) {
+    for (var d = 0; d < plan[w].days.length; d++) {
+      var day = plan[w].days[d];
+      if (day.blocked) continue;
+      for (var i = 0; i < day.slots.length; i++) {
+        var s = day.slots[i];
+        rows.push([month,"Week "+plan[w].week,day.dateLabel||day.dayName,s.code,s.name,s.postcode,s.tier].join("\t"));
+      }
+    }
+  }
+  return rows.join("\n");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI COMPONENTS
+// ─────────────────────────────────────────────────────────────────────────────
+function TierBadge(props) {
+  var c = TC[props.tier] || TC.C;
+  return <span style={{background:c.bg,color:c.text,border:"1px solid "+c.border,borderRadius:3,padding:"1px 6px",fontSize:10,fontWeight:700,fontFamily:"monospace",flexShrink:0}}>{props.tier}</span>;
+}
+
+function NavBtn(props) {
+  var f = encodeURIComponent(props.from+", UK");
+  var t = encodeURIComponent(props.to+", UK");
+  return (
+    <span style={{display:"inline-flex",gap:3,flexShrink:0}}>
+      <a href={"https://citymapper.com/directions?startaddress="+f+"&endaddress="+t} target="_blank" rel="noreferrer" style={{background:"#00d084",color:"#000",borderRadius:4,padding:"2px 6px",fontSize:9,fontWeight:700,textDecoration:"none"}}>🗺</a>
+      <a href={"https://tfl.gov.uk/plan-a-journey/results?InputFrom="+props.from+"&InputTo="+props.to} target="_blank" rel="noreferrer" style={{background:"#dc241f",color:"#fff",borderRadius:4,padding:"2px 6px",fontSize:9,fontWeight:700,textDecoration:"none"}}>TFL</a>
+    </span>
+  );
+}
+
+function RouteMap(props) {
+  const [open, setOpen] = useState(false);
+  var slots = props.slots;
+  if (!slots.length) return null;
+  var hLat = props.homeLat, hLng = props.homeLng, hpc = props.homePostcode;
+  var dest = encodeURIComponent(slots[slots.length-1].postcode+", UK");
+  var wps = slots.slice(0,-1).map(function(s){return encodeURIComponent(s.postcode+", UK");}).join("|");
+  var gmUrl = "https://www.google.com/maps/dir/?api=1&origin="+encodeURIComponent(hpc+", UK")+"&destination="+dest+(wps?"&waypoints="+wps:"")+"&travelmode=transit";
+  var pal = ["#38bdf8","#fb923c","#a78bfa","#34d399","#f472b6","#facc15","#60a5fa","#f87171","#2dd4bf","#c084fc"];
+  var dc = {}, ci = 0;
+  var sc = slots.map(function(s) { var d=getDistrict(s.postcode); if(!dc[d]){dc[d]=pal[ci%pal.length];ci++;} return dc[d]; });
+  var rc = [[hLat,hLng]].concat(slots.map(function(s){return getCoords(s.postcode);})).concat([[hLat,hLng]]);
+  var aLat = [hLat].concat(slots.map(function(s){return getCoords(s.postcode)[0];}));
+  var aLng = [hLng].concat(slots.map(function(s){return getCoords(s.postcode)[1];}));
+  var mjs = [{lat:hLat,lng:hLng,lbl:"H",col:"#38bdf8",sz:30,pop:"Home — "+hpc}]
+    .concat(slots.map(function(s,i){var c=getCoords(s.postcode);return{lat:c[0],lng:c[1],lbl:String(i+1),col:sc[i],sz:26,pop:(i+1)+". "+s.name+" "+s.arriveTime};}))
+    .map(function(m){
+      var p=m.pop.replace(/'/g," ").replace(/"/g," ");
+      return "L.marker(["+m.lat+","+m.lng+"],{icon:L.divIcon({className:'',html:'<div style=\"width:"+m.sz+"px;height:"+m.sz+"px;background:"+m.col+";border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:"+(m.sz===30?13:10)+"px;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.5);\">"+m.lbl+"</div>',iconSize:["+m.sz+","+m.sz+"],iconAnchor:["+(m.sz/2)+","+(m.sz/2)+"]})}).addTo(map).bindPopup('"+p+"');";
+    }).join("\n");
+  var mapHtml = "<!DOCTYPE html><html><head><meta charset='utf-8'/><link rel='stylesheet' href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'/><script src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'><"+"/script><style>*{margin:0;padding:0}html,body,#map{width:100%;height:100%;background:#0f1923}</style></head><body><div id='map'></div><script>var map=L.map('map',{zoomControl:true,attributionControl:false});L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);L.polyline("+JSON.stringify(rc)+",{color:'#38bdf8',weight:3,opacity:.85,dashArray:'8,4'}).addTo(map);"+mjs+"map.fitBounds([["+(Math.min.apply(null,aLat)-0.015)+","+(Math.min.apply(null,aLng)-0.02)+"],["+(Math.max.apply(null,aLat)+0.015)+","+(Math.max.apply(null,aLng)+0.02)+"]]);"+("<")+"/script></body></html>";
+  var src = "data:text/html;charset=utf-8,"+encodeURIComponent(mapHtml);
+  return (
+    <div>
+      <div onClick={function(){setOpen(function(o){return !o;});}} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 14px",background:"#0d1825",borderTop:"1px solid #1e293b",cursor:"pointer",userSelect:"none"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span>🗺</span>
+          <span style={{fontSize:12,fontWeight:700,color:"#38bdf8"}}>{open?"Hide":"Show"} Route Map</span>
+          <span style={{fontSize:10,color:"#475569"}}>{slots.length+1} stops · arc routing</span>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <a href={gmUrl} target="_blank" rel="noreferrer" onClick={function(e){e.stopPropagation();}} style={{background:"#1a3a1a",color:"#4ade80",border:"1px solid #16a34a",borderRadius:5,padding:"3px 8px",fontSize:10,fontWeight:700,textDecoration:"none"}}>Google Maps ↗</a>
+          <span style={{color:"#334155"}}>{open?"▲":"▼"}</span>
+        </div>
+      </div>
+      {open && (
+        <div style={{position:"relative"}}>
+          <iframe src={src} style={{width:"100%",height:340,border:"none",display:"block"}} title="map"/>
+          <div style={{position:"absolute",top:8,left:8,background:"rgba(10,17,26,.93)",border:"1px solid #1e293b",borderRadius:8,padding:"8px 10px",maxWidth:185}}>
+            <div style={{fontSize:9,fontWeight:700,color:"#64748b",marginBottom:4}}>STOPS · same colour = zone</div>
+            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <div style={{width:14,height:14,borderRadius:"50%",background:"#38bdf8",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:800,color:"#000"}}>H</div>
+                <span style={{fontSize:9,color:"#94a3b8"}}>{hpc}</span>
+              </div>
+              {slots.map(function(s,i){return(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:4}}>
+                  <div style={{width:14,height:14,borderRadius:"50%",background:sc[i],flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:800,color:"#fff"}}>{i+1}</div>
+                  <span style={{fontSize:9,color:"#94a3b8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{s.name}</span>
+                  <span style={{fontSize:8,color:"#334155",flexShrink:0}}>{s.arriveTime}</span>
+                </div>
+              );})}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotesModal(props) {
+  const [note, setNote] = useState(props.meta ? props.meta.notes||"" : "");
+  const [merch, setMerch] = useState(props.meta ? props.meta.merch||false : false);
+  const [training, setTraining] = useState(props.meta ? props.meta.training||false : false);
+  // availableDays: array of day names the store manager is available
+  // Empty array = available any day (no restriction)
+  const [availDays, setAvailDays] = useState(props.meta ? props.meta.availDays||[] : []);
+
+  function toggleDay(day) {
+    setAvailDays(function(prev) {
+      if (prev.indexOf(day) >= 0) return prev.filter(function(d){return d!==day;});
+      return prev.concat([day]);
+    });
+  }
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.82)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={props.onClose}>
+      <div style={{background:"#131f2e",border:"1px solid #1e293b",borderRadius:12,padding:22,width:"100%",maxWidth:440}} onClick={function(e){e.stopPropagation();}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:14}}>
+          <div>
+            <div style={{fontWeight:700,color:"#e2e8f0",fontSize:14}}>{props.store.name}</div>
+            <div style={{fontSize:11,color:"#64748b"}}>{props.store.code} · {props.store.postcode}</div>
+          </div>
+          <button onClick={props.onClose} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:20}}>✕</button>
+        </div>
+
+        {/* Availability days */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Manager available — tick days only</div>
+          <div style={{fontSize:10,color:"#475569",marginBottom:8}}>Leave all unticked = available any day. Tick specific days to restrict scheduling.</div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            {["Monday","Tuesday","Wednesday","Thursday","Friday"].map(function(day){
+              var on = availDays.indexOf(day) >= 0;
+              return (
+                <button key={day} onClick={function(){toggleDay(day);}}
+                  style={{background:on?"#1e3a5f":"#0a111a",border:"2px solid "+(on?"#2563eb":"#1e293b"),color:on?"#60a5fa":"#475569",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",flex:1,minWidth:70}}>
+                  {on?"✓ ":""}{day.slice(0,3)}
+                </button>
+              );
+            })}
+          </div>
+          {availDays.length > 0 && (
+            <div style={{fontSize:10,color:"#38bdf8",marginTop:6}}>
+              📅 Only scheduled on: {availDays.map(function(d){return d.slice(0,3);}).join(", ")}
+            </div>
+          )}
+          {availDays.length === 0 && (
+            <div style={{fontSize:10,color:"#334155",marginTop:6}}>No restriction — can be scheduled any weekday</div>
+          )}
+        </div>
+
+        <textarea value={note} onChange={function(e){setNote(e.target.value);}} placeholder="Notes, objectives, follow-ups..." style={{width:"100%",background:"#0a111a",border:"1px solid #1e293b",borderRadius:7,color:"#e2e8f0",padding:10,fontSize:13,minHeight:80,resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+        <div style={{display:"flex",gap:20,marginBottom:16}}>
+          <label style={{display:"flex",alignItems:"center",gap:7,color:"#94a3b8",fontSize:13,cursor:"pointer"}}><input type="checkbox" checked={merch} onChange={function(e){setMerch(e.target.checked);}}/> Merch</label>
+          <label style={{display:"flex",alignItems:"center",gap:7,color:"#94a3b8",fontSize:13,cursor:"pointer"}}><input type="checkbox" checked={training} onChange={function(e){setTraining(e.target.checked);}}/> Training</label>
+        </div>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+          <button style={S.ghost} onClick={props.onClose}>Cancel</button>
+          <button style={S.btn} onClick={function(){props.onSave({notes:note,merch:merch,training:training,availDays:availDays});}}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DayCard(props) {
+  var day = props.day, slots = day.slots, hpc = props.homePostcode;
+  var hLat = props.homeLat, hLng = props.homeLng;
+  var late = day.backTime && parseInt(day.backTime.split(":")[0]) >= 18;
+  var districts = [], seen = {};
+  for (var i = 0; i < slots.length; i++) {
+    var dd = getDistrict(slots[i].postcode);
+    if (!seen[dd]) { seen[dd] = true; districts.push(dd); }
+  }
+  if (day.blocked) {
+    return (
+      <div style={{background:"#1a1010",border:"1px solid #4a1010",borderRadius:10,padding:"14px 18px",display:"flex",alignItems:"center",gap:12}}>
+        <span style={{fontSize:22}}>🚫</span>
+        <div>
+          <div style={{fontSize:13,fontWeight:700,color:"#f87171"}}>{day.dateLabel||day.dayName}</div>
+          <div style={{fontSize:11,color:"#7f1d1d",marginTop:2}}>Blocked — Annual leave or unavailable</div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{background:"#131f2e",border:"1px solid #1e293b",borderRadius:10,overflow:"hidden"}}>
+      <div style={{background:"#0a111a",padding:"9px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6,borderBottom:"1px solid #1e293b"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span style={{fontWeight:800,fontSize:13,color:"#38bdf8"}}>{day.dateLabel||day.dayName}</span>
+          <span style={{fontSize:10,color:"#475569"}}>{slots.length} visits</span>
+          {slots.length > 0 && <span style={{fontSize:9,color:late?"#f87171":"#334155"}}>back {day.backTime}{late?" ⚠":""}</span>}
+          {day.hasDriveLeg && <span style={{fontSize:9,color:"#fb923c",background:"#3a2000",border:"1px solid #ea580c",borderRadius:3,padding:"1px 5px",fontWeight:700}}>🚗+🚌 split day</span>}
+          {districts.length > 0 && <span style={{fontSize:9,color:"#334155",fontFamily:"monospace"}}>{districts.join(" → ")}</span>}
+        </div>
+        <div style={{display:"flex",gap:3}}>
+          {["A","B","C","D"].map(function(t){
+            var n=slots.filter(function(s){return s.tier===t;}).length;
+            if(!n) return null;
+            var c=TC[t];
+            return <span key={t} style={{background:c.bg,color:c.text,border:"1px solid "+c.border,borderRadius:4,fontSize:9,fontWeight:700,padding:"1px 6px"}}>{t}×{n}</span>;
+          })}
+        </div>
+      </div>
+      <div style={{padding:"3px 0"}}>
+        {/* Depart row — changes label based on whether there is a drive leg */}
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px"}}>
+          <div style={{width:24,height:24,borderRadius:"50%",background:day.hasDriveLeg?"#3a2000":"#1e3a5f",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>{day.hasDriveLeg?"🚗":"🏠"}</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:11,fontWeight:700,color:day.hasDriveLeg?"#fb923c":"#38bdf8"}}>
+              {day.hasDriveLeg ? "🚗 Drive leg — depart "+hpc+" 07:30" : "Depart — "+hpc}
+            </div>
+            <div style={{fontSize:9,color:"#475569"}}>{day.hasDriveLeg?"Car to furthest store first · return home · then transit":"09:00 · furthest stop first, arc back home"}</div>
+          </div>
+          {slots.length > 0 && <NavBtn from={hpc} to={slots[0].postcode}/>}
+        </div>
+        {slots.length === 0 && <div style={{padding:14,color:"#334155",fontSize:11,textAlign:"center"}}>No stores today</div>}
+        {slots.map(function(s, i) {
+          var c = TC[s.tier]||TC.C;
+          var prevPC = i===0 ? hpc : slots[i-1].postcode;
+          var meta = props.visitMeta[s.id]||{};
+          var sameZone = i > 0 && getDistrict(slots[i-1].postcode) === getDistrict(s.postcode);
+          var isLastStop = i === slots.length - 1;
+          var lastCoords = getCoords(s.postcode);
+          var nearHub = isLastStop && hubScore(lastCoords[0], lastCoords[1]) < 0.6;
+          return (
+            <div key={s.id}>
+              {s.isFirstTransit && (
+                <div>
+                  {/* Return home divider between drive and transit legs */}
+                  <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 14px 4px 14px",background:"#1a1200",borderTop:"1px solid #3a2000",borderBottom:"1px solid #1e293b",margin:"6px 0"}}>
+                    <span style={{fontSize:9,color:"#fb923c",fontStyle:"italic",flex:1}}>🚗 Drive back to home · park car</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px"}}>
+                    <div style={{width:24,height:24,borderRadius:"50%",background:"#1e3a5f",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>🏠</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#38bdf8"}}>Return home · {hpc} · then depart by 🚌 transit</div>
+                      <div style={{fontSize:9,color:"#475569"}}>Park car · freshen up · ~15 min buffer</div>
+                    </div>
+                    <NavBtn from={hpc} to={s.postcode}/>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 14px 4px 14px",background:"#0d1f30",borderRadius:6,margin:"4px 10px"}}>
+                    <span style={{fontSize:10,fontWeight:700,color:"#38bdf8"}}>🚌 Transit leg</span>
+                    <span style={{fontSize:9,color:"#475569"}}>public transport from home</span>
+                  </div>
+                </div>
+              )}
+              <div style={{display:"flex",alignItems:"center",gap:6,padding:"2px 14px 2px 26px",background:sameZone?"rgba(5,150,105,.06)":"transparent"}}>
+                <div style={{width:1,height:14,background:s.isDriveLeg?"#fb923c":sameZone?"#059669":"#1e293b",marginLeft:11,flexShrink:0}}/>
+                <span style={{fontSize:9,color:s.isDriveLeg?"#fb923c":sameZone?"#34d399":"#475569",fontStyle:"italic",flex:1}}>
+                  {s.travelMode} · ~{s.travelMins} min{s.isDriveLeg?" · drive":(sameZone?" · same zone":"")}
+                </span>
+                {i > 0 && !s.isFirstTransit && <NavBtn from={prevPC} to={s.postcode}/>}
+              </div>
+              <div style={{margin:"2px 10px",background:sameZone?"#142a1e":"#1a2840",borderLeft:"3px solid "+c.border,borderRadius:6,padding:"8px 10px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:7,justifyContent:"space-between",flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,flex:1,minWidth:0}}>
+                    <div style={{width:20,height:20,borderRadius:"50%",background:c.bg,border:"1px solid "+c.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:c.text,flexShrink:0}}>{i+1}</div>
+                    <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                        <span style={{fontFamily:"monospace",fontSize:10,color:"#38bdf8",fontWeight:700,flexShrink:0}}>▶{s.arriveTime}</span>
+                        <span style={{fontFamily:"monospace",fontSize:9,color:"#475569",flexShrink:0}}>→{s.leaveTime}</span>
+                        <TierBadge tier={s.tier}/>
+                        {s.isDriveLeg && <span style={{background:"#3a2000",color:"#fb923c",border:"1px solid #ea580c",borderRadius:3,padding:"0 4px",fontSize:8,fontWeight:700}}>🚗 drive</span>}
+                        {sameZone && !s.isDriveLeg && <span style={{background:"#0a2a1a",color:"#34d399",border:"1px solid #059669",borderRadius:3,padding:"0 4px",fontSize:8,fontWeight:700}}>cluster</span>}
+                        {isLastStop && <span style={{background:"#1a2a40",color:"#60a5fa",border:"1px solid #2563eb",borderRadius:3,padding:"0 4px",fontSize:8,fontWeight:700}}>last stop</span>}
+                        <span style={{fontWeight:600,color:"#e2e8f0",fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+                        <span style={{color:"#475569",fontSize:10,fontFamily:"monospace",flexShrink:0}}>{s.postcode}</span>
+                      </div>
+                      <div style={{fontSize:9,color:"#334155",marginTop:1,fontFamily:"monospace"}}>{s.code}</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                    {meta.merch && <span style={{background:TC.A.bg,color:TC.A.text,borderRadius:3,fontSize:8,fontWeight:700,padding:"1px 4px"}}>M</span>}
+                    {meta.training && <span style={{background:TC.B.bg,color:TC.B.text,borderRadius:3,fontSize:8,fontWeight:700,padding:"1px 4px"}}>T</span>}
+                    {meta.availDays && meta.availDays.length > 0 && (function(){
+                      var dayOk = meta.availDays.indexOf(day.dayName) >= 0;
+                      return dayOk
+                        ? <span style={{background:"#0d2a1a",color:"#4ade80",border:"1px solid #16a34a",borderRadius:3,fontSize:8,fontWeight:700,padding:"1px 4px"}}>✓ {day.dayName.slice(0,3)}</span>
+                        : <span style={{background:"#2a1010",color:"#f87171",border:"1px solid #991b1b",borderRadius:3,fontSize:8,fontWeight:700,padding:"1px 4px"}} title={"Manager only available: "+meta.availDays.map(function(d){return d.slice(0,3);}).join(", ")}>⚠ Wrong day</span>;
+                    })()}
+                    <button style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:12,padding:"2px 4px"}} onClick={function(){props.onNote(s);}}>📝</button>
+                    <button style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:12,padding:"2px 4px"}} onClick={function(){props.onRemove(s.id);}}>✕</button>
+                  </div>
+                </div>
+                {meta.notes && <div style={{fontSize:10,color:"#64748b",fontStyle:"italic",marginTop:3}}>💬 {meta.notes.slice(0,70)}{meta.notes.length>70?"…":""}</div>}
+              </div>
+            </div>
+          );
+        })}
+        {slots.length > 0 && (
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"2px 14px 2px 26px"}}>
+              <div style={{width:1,height:14,background:"#1e293b",marginLeft:11,flexShrink:0}}/>
+              <span style={{fontSize:9,color:"#475569",fontStyle:"italic",flex:1}}>Return home</span>
+              <NavBtn from={slots[slots.length-1].postcode} to={hpc}/>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",borderTop:"1px solid #0f1923",marginTop:2}}>
+              <div style={{width:24,height:24,borderRadius:"50%",background:"#1e3a5f",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>🏠</div>
+              <div style={{fontSize:11,fontWeight:700,color:"#38bdf8"}}>Return — {hpc} · Est. {day.backTime}{late?" ⚠ Late":""}</div>
+            </div>
+          </div>
+        )}
+      </div>
+      <RouteMap slots={slots} homePostcode={hpc} homeLat={hLat} homeLng={hLng}/>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 1 — UPLOAD
+// ─────────────────────────────────────────────────────────────────────────────
+function StepUpload(props) {
+  const [pasted, setPasted] = useState("");
+  const [home, setHome] = useState("");
+  const [repName, setRepName] = useState("");
+  const [error, setError] = useState("");
+  const [dragging, setDragging] = useState(false);
+  var fileRef = useRef();
+
+  function go(stores) {
+    if (!stores.length) { setError("No valid stores found — check format"); return; }
+    setError("");
+    props.onLoaded(stores, home.trim()||"EN2 8QH", repName.trim()||"My Territory");
+  }
+  function handleFile(file) {
+    parseUploadedFile(file).then(go).catch(function(e){setError(e.message||"Could not read file");});
+  }
+
+  return (
+    <div style={{maxWidth:640,margin:"0 auto"}}>
+      <div style={{textAlign:"center",marginBottom:30,paddingTop:12}}>
+        <div style={{fontSize:46,marginBottom:10}}>🗺</div>
+        <div style={{fontSize:24,fontWeight:800,color:"#e2e8f0",marginBottom:6}}>Territory Journey Planner</div>
+        <div style={{fontSize:12,color:"#64748b",lineHeight:1.8}}>
+          Zone-committed · Arc routing · Soft landing · Tier rotation
+        </div>
+      </div>
+      <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:180}}>
+          <div style={S.label}>Name / territory</div>
+          <input value={repName} onChange={function(e){setRepName(e.target.value);}} placeholder="e.g. Adrian — North London" style={{...S.input,width:"100%",boxSizing:"border-box"}}/>
+        </div>
+        <div style={{flex:1,minWidth:150}}>
+          <div style={S.label}>Home postcode</div>
+          <input value={home} onChange={function(e){setHome(e.target.value);}} placeholder="e.g. EN2 8QH" style={{...S.input,width:"100%",boxSizing:"border-box"}}/>
+        </div>
+      </div>
+      <div
+        onDragOver={function(e){e.preventDefault();e.stopPropagation();setDragging(true);}}
+        onDragLeave={function(e){e.stopPropagation();setDragging(false);}}
+        onDrop={function(e){e.preventDefault();e.stopPropagation();setDragging(false);if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);}}
+        onClick={function(e){e.stopPropagation();if(fileRef.current)fileRef.current.click();}}
+        style={{border:"2px dashed "+(dragging?"#38bdf8":"#1e293b"),borderRadius:10,padding:24,textAlign:"center",cursor:"pointer",marginBottom:14,background:dragging?"#0d1f30":"#0d1825",transition:"all .15s"}}>
+        <div style={{fontSize:28,marginBottom:6}}>📂</div>
+        <div style={{fontSize:13,fontWeight:600,color:dragging?"#38bdf8":"#94a3b8"}}>Drop file here or click to browse</div>
+        <div style={{fontSize:10,color:"#475569",marginTop:4}}>.xlsx · .csv · .txt</div>
+        <div style={{fontSize:9,color:"#334155",marginTop:2}}>Columns: Store Code | Store Name | Postcode | Tier</div>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.txt" style={{display:"none"}} onChange={function(e){if(e.target.files[0])handleFile(e.target.files[0]);}}/>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+        <div style={{flex:1,height:1,background:"#1e293b"}}/>
+        <span style={{fontSize:10,color:"#334155",fontWeight:600}}>OR PASTE YOUR STORE LIST</span>
+        <div style={{flex:1,height:1,background:"#1e293b"}}/>
+      </div>
+      <div style={S.card} onClick={function(e){e.stopPropagation();}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <div style={S.label}>Paste stores</div>
+          <button onClick={function(){setPasted(EXAMPLE_STORES);}} style={{fontSize:10,color:"#475569",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Load example</button>
+        </div>
+        <textarea value={pasted} onChange={function(e){setPasted(e.target.value);}} onClick={function(e){e.stopPropagation();}} onFocus={function(e){e.stopPropagation();}}
+          placeholder={"Code | Store Name | Postcode | Tier\nAMY101 | Amy Pharmacy | N8 8SY | B"}
+          style={{...S.ta,minHeight:130,marginBottom:8}}/>
+        <div style={{fontSize:10,color:"#334155",marginBottom:10}}>Format: Code | Name | Postcode | Tier — separator: | , or tab</div>
+        {error && <div style={{color:"#f87171",fontSize:12,marginBottom:8}}>⚠ {error}</div>}
+        <div style={{display:"flex",justifyContent:"flex-end"}}>
+          <button style={{...S.btn,opacity:pasted.trim()?1:0.4}} disabled={!pasted.trim()} onClick={function(){var s=parseStoreList(pasted);if(!s.length){setError("No stores detected");return;}go(s);}}>
+            Parse Stores →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AVAILABILITY MANAGER — set days stores are open / manager is in
+// ─────────────────────────────────────────────────────────────────────────────
+function AvailabilityManager(props) {
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [open, setOpen] = useState(false);
+
+  var stores = props.stores || [];
+  var sa = props.storeAvailability || {};
+  var allDays = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+
+  // Stores that match the search
+  var matched = stores.filter(function(s) {
+    if (!search.trim()) return true;
+    var q = search.toLowerCase();
+    return s.name.toLowerCase().indexOf(q) >= 0
+        || s.postcode.toLowerCase().indexOf(q) >= 0
+        || s.code.toLowerCase().indexOf(q) >= 0;
+  });
+
+  var selected = selectedId ? stores.find(function(s){return s.id===selectedId;}) : null;
+  var selectedDays = selectedId && sa[selectedId] ? sa[selectedId].availDays || [] : [];
+
+  function toggleDay(day) {
+    if (!selectedId) return;
+    var current = sa[selectedId] ? sa[selectedId].availDays || [] : [];
+    var next = current.indexOf(day) >= 0
+      ? current.filter(function(d){return d!==day;})
+      : current.concat([day]);
+    props.onUpdate(selectedId, next);
+  }
+
+  function clearStore(id) {
+    props.onUpdate(id, []);
+  }
+
+  // Count how many stores have restrictions set
+  var restrictedCount = Object.keys(sa).filter(function(id){return sa[id] && sa[id].availDays && sa[id].availDays.length > 0;}).length;
+
+  return (
+    <div style={{marginTop:16}}>
+      {/* Header — collapsible */}
+      <div
+        onClick={function(){setOpen(function(o){return !o;});}}
+        style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"#0a111a",border:"1px solid #1e293b",borderRadius:open?"10px 10px 0 0":"10px",cursor:"pointer",userSelect:"none"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:16}}>📅</span>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>Store Availability</div>
+            <div style={{fontSize:10,color:"#475569",marginTop:1}}>Set which days a manager is in — planner will schedule around it</div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {restrictedCount > 0 && (
+            <span style={{background:"#1e3a5f",color:"#60a5fa",border:"1px solid #2563eb",borderRadius:12,padding:"2px 10px",fontSize:10,fontWeight:700}}>
+              {restrictedCount} store{restrictedCount!==1?"s":""} restricted
+            </span>
+          )}
+          <span style={{color:"#334155",fontSize:14}}>{open?"▲":"▼"}</span>
+        </div>
+      </div>
+
+      {open && (
+        <div style={{border:"1px solid #1e293b",borderTop:"none",borderRadius:"0 0 10px 10px",background:"#131f2e",padding:16}}>
+
+          {/* Search + dropdown */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Find a store</div>
+            <input
+              value={search}
+              onChange={function(e){setSearch(e.target.value);setSelectedId(null);}}
+              placeholder="Type store name, postcode or code…"
+              style={{...S.input,width:"100%",boxSizing:"border-box",marginBottom:6}}
+            />
+            {search.trim() && matched.length > 0 && (
+              <div style={{background:"#0a111a",border:"1px solid #1e293b",borderRadius:7,maxHeight:200,overflowY:"auto"}}>
+                {matched.map(function(s){
+                  var hasRestriction = sa[s.id] && sa[s.id].availDays && sa[s.id].availDays.length > 0;
+                  var isSelected = selectedId === s.id;
+                  return (
+                    <div key={s.id}
+                      onClick={function(){setSelectedId(s.id);setSearch(s.name);}}
+                      style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",cursor:"pointer",background:isSelected?"#1e293b":"transparent",borderBottom:"1px solid #0f1923"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <TierBadge tier={s.tier}/>
+                        <div>
+                          <div style={{fontSize:12,color:"#e2e8f0",fontWeight:isSelected?700:400}}>{s.name}</div>
+                          <div style={{fontSize:10,color:"#475569",fontFamily:"monospace"}}>{s.postcode} · {s.code}</div>
+                        </div>
+                      </div>
+                      {hasRestriction && (
+                        <span style={{fontSize:9,color:"#60a5fa",background:"#1e3a5f",border:"1px solid #2563eb",borderRadius:4,padding:"1px 6px",flexShrink:0}}>
+                          {sa[s.id].availDays.map(function(d){return d.slice(0,3);}).join(", ")}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+                {matched.length === 0 && <div style={{padding:12,fontSize:11,color:"#334155",textAlign:"center"}}>No stores match</div>}
+              </div>
+            )}
+          </div>
+
+          {/* Day picker for selected store */}
+          {selected && (
+            <div style={{background:"#0a111a",border:"1px solid #1e293b",borderRadius:8,padding:14,marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:6}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>{selected.name}</div>
+                  <div style={{fontSize:10,color:"#475569"}}>{selected.postcode} · {selected.code}</div>
+                </div>
+                {selectedDays.length > 0 && (
+                  <button onClick={function(){clearStore(selected.id);}} style={{fontSize:10,color:"#f87171",background:"none",border:"1px solid #991b1b",borderRadius:5,padding:"3px 8px",cursor:"pointer"}}>
+                    Clear restriction
+                  </button>
+                )}
+              </div>
+
+              <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>
+                Tick the days the manager is available. Leave all blank = any day.
+              </div>
+
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+                {allDays.map(function(day){
+                  var on = selectedDays.indexOf(day) >= 0;
+                  return (
+                    <button key={day} onClick={function(){toggleDay(day);}}
+                      style={{flex:1,minWidth:70,background:on?"#1e3a5f":"#131f2e",border:"2px solid "+(on?"#2563eb":"#1e293b"),color:on?"#60a5fa":"#475569",borderRadius:7,padding:"8px 6px",fontWeight:700,fontSize:12,cursor:"pointer",textAlign:"center",transition:"all .1s"}}>
+                      <div>{day.slice(0,3)}</div>
+                      {on && <div style={{fontSize:8,marginTop:2,color:"#38bdf8"}}>✓</div>}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selectedDays.length > 0 ? (
+                <div style={{fontSize:11,color:"#38bdf8",background:"#0d1f30",borderRadius:6,padding:"6px 10px"}}>
+                  📅 {selected.name} will only be scheduled on <strong>{selectedDays.map(function(d){return d.slice(0,3);}).join(", ")}</strong>
+                </div>
+              ) : (
+                <div style={{fontSize:11,color:"#334155",background:"#0a111a",borderRadius:6,padding:"6px 10px"}}>
+                  No restriction set — can be visited any weekday
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Summary of all restrictions */}
+          {restrictedCount > 0 && (
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>All restrictions set</div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {stores.filter(function(s){return sa[s.id] && sa[s.id].availDays && sa[s.id].availDays.length>0;}).map(function(s){
+                  return (
+                    <div key={s.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#0a111a",borderRadius:6,padding:"7px 12px",flexWrap:"wrap",gap:6}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <TierBadge tier={s.tier}/>
+                        <div>
+                          <span style={{fontSize:12,color:"#e2e8f0",fontWeight:600}}>{s.name}</span>
+                          <span style={{fontSize:10,color:"#475569",marginLeft:6,fontFamily:"monospace"}}>{s.postcode}</span>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{display:"flex",gap:3}}>
+                          {["Monday","Tuesday","Wednesday","Thursday","Friday"].map(function(d){
+                            var on = sa[s.id].availDays.indexOf(d) >= 0;
+                            return (
+                              <span key={d} style={{fontSize:9,fontWeight:700,padding:"2px 5px",borderRadius:3,background:on?"#1e3a5f":"#0f1923",color:on?"#60a5fa":"#1e293b",border:"1px solid "+(on?"#2563eb":"#1e293b")}}>
+                                {d.slice(0,3)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <button onClick={function(){clearStore(s.id);}} style={{fontSize:9,color:"#f87171",background:"none",border:"none",cursor:"pointer",padding:"2px 4px"}}>✕</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {restrictedCount === 0 && (
+            <div style={{textAlign:"center",color:"#334155",fontSize:11,padding:"14px 0"}}>
+              No restrictions set yet — search for a store above to add one
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AVAILABILITY MANAGER
+// ─────────────────────────────────────────────────────────────────────────────
+function AvailabilityManager(props) {
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [open, setOpen] = useState(false);
+  var stores = props.stores || [];
+  var sa = props.storeAvailability || {};
+  var allDays = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+  var matched = stores.filter(function(s) {
+    if (!search.trim()) return false; // don't show all until typed
+    var q = search.toLowerCase();
+    return s.name.toLowerCase().indexOf(q)>=0||s.postcode.toLowerCase().indexOf(q)>=0||s.code.toLowerCase().indexOf(q)>=0;
+  });
+  var selected = selectedId ? stores.find(function(s){return s.id===selectedId;}) : null;
+  var selectedDays = selectedId && sa[selectedId] ? sa[selectedId].availDays||[] : [];
+  function toggleDay(day) {
+    if (!selectedId) return;
+    var current = sa[selectedId] ? sa[selectedId].availDays||[] : [];
+    var next = current.indexOf(day)>=0 ? current.filter(function(d){return d!==day;}) : current.concat([day]);
+    props.onUpdate(selectedId, next);
+  }
+  function clearStore(id) { props.onUpdate(id, []); }
+  var restrictedCount = Object.keys(sa).filter(function(id){return sa[id]&&sa[id].availDays&&sa[id].availDays.length>0;}).length;
+  return (
+    <div style={{marginTop:16}}>
+      <div onClick={function(){setOpen(function(o){return !o;});}} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"#0a111a",border:"1px solid #1e293b",borderRadius:open?"10px 10px 0 0":"10px",cursor:"pointer",userSelect:"none"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:16}}>📅</span>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>Store Availability</div>
+            <div style={{fontSize:10,color:"#475569",marginTop:1}}>Set which days a manager is in — planner schedules around it</div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {restrictedCount>0&&<span style={{background:"#1e3a5f",color:"#60a5fa",border:"1px solid #2563eb",borderRadius:12,padding:"2px 10px",fontSize:10,fontWeight:700}}>{restrictedCount} store{restrictedCount!==1?"s":""} restricted</span>}
+          <span style={{color:"#334155",fontSize:14}}>{open?"▲":"▼"}</span>
+        </div>
+      </div>
+      {open&&(
+        <div style={{border:"1px solid #1e293b",borderTop:"none",borderRadius:"0 0 10px 10px",background:"#131f2e",padding:16}}>
+          <div style={{marginBottom:14}}>
+            <div style={S.label}>Search for a store</div>
+            <div style={{position:"relative"}}>
+              <input value={search} onChange={function(e){setSearch(e.target.value);setSelectedId(null);}} placeholder="Type store name, postcode or code…" style={{...S.input,width:"100%",boxSizing:"border-box"}}/>
+              {search.trim()&&matched.length>0&&(
+                <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,background:"#0a111a",border:"1px solid #1e293b",borderRadius:"0 0 7px 7px",maxHeight:220,overflowY:"auto"}}>
+                  {matched.map(function(s){
+                    var hasR=sa[s.id]&&sa[s.id].availDays&&sa[s.id].availDays.length>0;
+                    var isSel=selectedId===s.id;
+                    return(
+                      <div key={s.id} onClick={function(){setSelectedId(s.id);setSearch(s.name);}} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",cursor:"pointer",background:isSel?"#1e293b":"transparent",borderBottom:"1px solid #0f1923"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <TierBadge tier={s.tier}/>
+                          <div>
+                            <div style={{fontSize:12,color:"#e2e8f0",fontWeight:isSel?700:400}}>{s.name}</div>
+                            <div style={{fontSize:10,color:"#475569",fontFamily:"monospace"}}>{s.postcode} · {s.code}</div>
+                          </div>
+                        </div>
+                        {hasR&&<span style={{fontSize:9,color:"#60a5fa",background:"#1e3a5f",border:"1px solid #2563eb",borderRadius:4,padding:"1px 6px",flexShrink:0}}>{sa[s.id].availDays.map(function(d){return d.slice(0,3);}).join(", ")}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          {selected&&(
+            <div style={{background:"#0a111a",border:"1px solid #1e293b",borderRadius:8,padding:14,marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:6}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>{selected.name}</div>
+                  <div style={{fontSize:10,color:"#475569"}}>{selected.postcode} · {selected.code}</div>
+                </div>
+                {selectedDays.length>0&&<button onClick={function(){clearStore(selected.id);}} style={{fontSize:10,color:"#f87171",background:"none",border:"1px solid #991b1b",borderRadius:5,padding:"3px 8px",cursor:"pointer"}}>Clear restriction</button>}
+              </div>
+              <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>Tick the days the manager is available. Leave all blank = any day.</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+                {allDays.map(function(day){
+                  var on=selectedDays.indexOf(day)>=0;
+                  return(
+                    <button key={day} onClick={function(){toggleDay(day);}} style={{flex:1,minWidth:70,background:on?"#1e3a5f":"#131f2e",border:"2px solid "+(on?"#2563eb":"#1e293b"),color:on?"#60a5fa":"#475569",borderRadius:7,padding:"8px 6px",fontWeight:700,fontSize:12,cursor:"pointer",textAlign:"center"}}>
+                      <div>{day.slice(0,3)}</div>
+                      {on&&<div style={{fontSize:8,marginTop:2,color:"#38bdf8"}}>✓</div>}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedDays.length>0
+                ?<div style={{fontSize:11,color:"#38bdf8",background:"#0d1f30",borderRadius:6,padding:"6px 10px"}}>📅 Will only be scheduled on: <strong>{selectedDays.map(function(d){return d.slice(0,3);}).join(", ")}</strong></div>
+                :<div style={{fontSize:11,color:"#334155",background:"#0a111a",borderRadius:6,padding:"6px 10px"}}>No restriction — can be visited any weekday</div>
+              }
+            </div>
+          )}
+          {restrictedCount>0&&(
+            <div>
+              <div style={S.label}>All restrictions set</div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {stores.filter(function(s){return sa[s.id]&&sa[s.id].availDays&&sa[s.id].availDays.length>0;}).map(function(s){
+                  return(
+                    <div key={s.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#0a111a",borderRadius:6,padding:"7px 12px",flexWrap:"wrap",gap:6}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <TierBadge tier={s.tier}/>
+                        <div>
+                          <span style={{fontSize:12,color:"#e2e8f0",fontWeight:600}}>{s.name}</span>
+                          <span style={{fontSize:10,color:"#475569",marginLeft:6,fontFamily:"monospace"}}>{s.postcode}</span>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{display:"flex",gap:3}}>
+                          {["Monday","Tuesday","Wednesday","Thursday","Friday"].map(function(d){
+                            var on=sa[s.id].availDays.indexOf(d)>=0;
+                            return <span key={d} style={{fontSize:9,fontWeight:700,padding:"2px 5px",borderRadius:3,background:on?"#1e3a5f":"#0f1923",color:on?"#60a5fa":"#1e293b",border:"1px solid "+(on?"#2563eb":"#1e293b")}}>{d.slice(0,3)}</span>;
+                          })}
+                        </div>
+                        <button onClick={function(){clearStore(s.id);}} style={{fontSize:9,color:"#f87171",background:"none",border:"none",cursor:"pointer",padding:"2px 4px"}}>✕</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {restrictedCount===0&&<div style={{textAlign:"center",color:"#334155",fontSize:11,padding:"14px 0"}}>No restrictions set — search for a store above to add one</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 2 — CONFIGURE
+// ─────────────────────────────────────────────────────────────────────────────
+function StepConfigure(props) {
+  var now = new Date();
+  var dm = MONTH_NAMES[now.getMonth()]; dm = dm.charAt(0).toUpperCase()+dm.slice(1)+" "+now.getFullYear();
+  const [month, setMonth] = useState(dm);
+  const [perDay, setPerDay] = useState(6);
+  const [visitMins, setVisitMins] = useState(25);
+  const [tierFilter, setTierFilter] = useState({A:true,B:true,C:true,D:false});
+  const [clusterMode, setClusterMode] = useState("district");
+  const [radiusKm, setRadiusKm] = useState(0.8);
+  const [blocked, setBlocked] = useState({});
+  const [search, setSearch] = useState("");
+  const [overrides, setOverrides] = useState({});
+  var storeAvailability = props.storeAvailability || {};
+
+  var pm = parseMonthString(month);
+  var cw = pm ? buildCalendarWeeks(pm.year, pm.month) : null;
+  var mv = !!pm;
+  var monthIndex = pm ? pm.month : 0;
+
+  var totalDays = cw ? cw.reduce(function(n,w){return n+w.length;},0) : 0;
+  var activeDays = cw ? cw.reduce(function(n,w){return n+w.filter(function(d){return !blocked[d.dateKey];}).length;},0) : 0;
+
+  // Apply rotation, then manual overrides
+  var rotated = mv ? filterByRotation(props.stores, monthIndex) : props.stores;
+  var tierCounts = props.stores.reduce(function(a,s){a[s.tier]=(a[s.tier]||0)+1;return a;},{});
+
+  // Apply manual overrides on top of rotation:
+  // "include" — force in even if rotation says skip
+  // "exclude" — force out even if rotation says include
+  var afterOverrides = props.stores.filter(function(s) {
+    // A and B stores are always included unless explicitly unlocked (excluded)
+    if (s.tier === "A" || s.tier === "B") {
+      return overrides[s.id] !== "exclude";
+    }
+    if (overrides[s.id] === "include") return true;
+    if (overrides[s.id] === "exclude") return false;
+    return rotated.some(function(r){ return r.id === s.id; });
+  });
+
+  var rotCounts = afterOverrides.reduce(function(a,s){a[s.tier]=(a[s.tier]||0)+1;return a;},{});
+
+  var filtered = afterOverrides.filter(function(s) {
+    if (!tierFilter[s.tier]) return false;
+    if (search) { var q=search.toLowerCase(); return s.name.toLowerCase().indexOf(q)>=0||s.postcode.toLowerCase().indexOf(q)>=0||s.code.toLowerCase().indexOf(q)>=0; }
+    return true;
+  });
+  var maxSlots = activeDays * perDay;
+  var covered = Math.min(filtered.length, maxSlots);
+
+  function toggleDay(k) { setBlocked(function(p){var n=Object.assign({},p);if(n[k])delete n[k];else n[k]=true;return n;}); }
+  function toggleOverride(id, action) {
+    setOverrides(function(prev) {
+      var n = Object.assign({}, prev);
+      if (n[id] === action) { delete n[id]; } // clicking same button clears it
+      else { n[id] = action; }
+      return n;
+    });
+  }
+  function toggleWeek(week) {
+    setBlocked(function(p){
+      var n=Object.assign({},p),keys=week.map(function(d){return d.dateKey;}),all=keys.every(function(k){return n[k];});
+      keys.forEach(function(k){if(all)delete n[k];else n[k]=true;});
+      return n;
+    });
+  }
+
+  return (
+    <div style={{maxWidth:1000,margin:"0 auto"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18,flexWrap:"wrap",gap:10}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:800,color:"#e2e8f0"}}>{props.repName}</div>
+          <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{props.stores.length} stores loaded · Home: {props.homePostcode}</div>
+        </div>
+        <button style={S.ghost} onClick={props.onBack}>← Re-upload</button>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+        <div style={S.card}>
+          {/* Tier rotation info box */}
+          <div style={{background:"#0a111a",borderRadius:7,padding:"10px 14px",marginBottom:14,borderLeft:"3px solid #2563eb"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#60a5fa",marginBottom:6}}>📅 Tier Rotation — {month||"select month"}</div>
+            <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+              <span style={{fontSize:10,color:"#64748b"}}>A: <span style={{color:"#4ade80"}}>all {tierCounts.A||0} locked monthly</span></span>
+              <span style={{fontSize:10,color:"#64748b"}}>B: <span style={{color:"#60a5fa"}}>all {tierCounts.B||0} locked monthly</span></span>
+              <span style={{fontSize:10,color:"#64748b"}}>C: <span style={{color:"#fb923c"}}>{rotCounts.C||0} of {tierCounts.C||0} this month</span> <span style={{color:"#334155"}}>(2-month rotation)</span></span>
+              <span style={{fontSize:10,color:"#64748b"}}>D: <span style={{color:"#fca5a5"}}>{rotCounts.D||0} of {tierCounts.D||0} this month</span> <span style={{color:"#334155"}}>(2-month rotation)</span></span>
+            </div>
+          </div>
+
+          <div style={S.label}>Include tiers</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+            {["A","B","C","D"].map(function(t){
+              var c=TC[t],on=tierFilter[t];
+              return <button key={t} onClick={function(){setTierFilter(function(p){return Object.assign({},p,{[t]:!p[t]});});}} style={{background:on?c.bg:"#0a111a",border:"2px solid "+(on?c.border:"#1e293b"),color:on?c.text:"#475569",borderRadius:7,padding:"5px 14px",fontWeight:700,fontSize:13,cursor:"pointer"}}>Tier {t} ({rotCounts[t]||0})</button>;
+            })}
+          </div>
+
+          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:16}}>
+            <div>
+              <div style={S.label}>Month</div>
+              <input value={month} onChange={function(e){setMonth(e.target.value);}} placeholder="e.g. August 2026" style={{...S.input,width:165,borderColor:mv?"#1e293b":"#7f1d1d"}}/>
+              {!mv && <div style={{fontSize:9,color:"#f87171",marginTop:3}}>Try "August 2026"</div>}
+            </div>
+            <div>
+              <div style={S.label}>Stores per day</div>
+              <div style={{display:"flex",gap:4}}>
+                {[5,6,7].map(function(n){return <button key={n} onClick={function(){setPerDay(n);}} style={{background:perDay===n?"#1e3a5f":"#0a111a",border:"1px solid "+(perDay===n?"#2563eb":"#1e293b"),color:perDay===n?"#60a5fa":"#64748b",borderRadius:6,padding:"6px 13px",fontWeight:700,fontSize:14,cursor:"pointer"}}>{n}</button>;})}
+              </div>
+            </div>
+            <div>
+              <div style={S.label}>Mins per visit</div>
+              <div style={{display:"flex",gap:4}}>
+                {[20,25,30].map(function(n){return <button key={n} onClick={function(){setVisitMins(n);}} style={{background:visitMins===n?"#1e3a5f":"#0a111a",border:"1px solid "+(visitMins===n?"#2563eb":"#1e293b"),color:visitMins===n?"#60a5fa":"#64748b",borderRadius:6,padding:"6px 13px",fontWeight:700,fontSize:14,cursor:"pointer"}}>{n}</button>;})}
+              </div>
+            </div>
+          </div>
+
+          <div style={{marginBottom:14}}>
+            <div style={S.label}>Clustering mode</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              <button onClick={function(){setClusterMode("district");}} style={{background:clusterMode==="district"?"#1a3f5c":"#0a111a",border:"1px solid "+(clusterMode==="district"?"#2563eb":"#1e293b"),color:clusterMode==="district"?"#60a5fa":"#64748b",borderRadius:6,padding:"6px 12px",fontWeight:700,fontSize:12,cursor:"pointer"}}>🏙 Postcode District</button>
+              <button onClick={function(){setClusterMode("radius");}} style={{background:clusterMode==="radius"?"#0a2a1a":"#0a111a",border:"1px solid "+(clusterMode==="radius"?"#059669":"#1e293b"),color:clusterMode==="radius"?"#34d399":"#64748b",borderRadius:6,padding:"6px 12px",fontWeight:700,fontSize:12,cursor:"pointer"}}>📍 Walking Radius</button>
+              {clusterMode==="radius" && [0.5,0.8,1.2].map(function(v){
+                var lbl=v===0.5?"500m":v===0.8?"800m":"1.2km";
+                return <button key={v} onClick={function(){setRadiusKm(v);}} style={{background:radiusKm===v?"#0a2a1a":"#0a111a",border:"1px solid "+(radiusKm===v?"#059669":"#1e293b"),color:radiusKm===v?"#34d399":"#64748b",borderRadius:6,padding:"6px 9px",fontWeight:700,fontSize:11,cursor:"pointer"}}>{lbl}</button>;
+              })}
+            </div>
+            <div style={{fontSize:10,color:"#475569",marginTop:5}}>
+              {clusterMode==="district" ? "One postcode district per day — no pinballing between areas" : "Groups stores within walking radius"}
+            </div>
+          </div>
+
+          <div style={{background:"#0a111a",borderRadius:7,padding:"10px 14px",marginBottom:14,display:"flex",gap:14,flexWrap:"wrap"}}>
+            <span style={{fontSize:11,color:"#64748b"}}>📋 <span style={{color:"#94a3b8"}}>{filtered.length} stores this month</span></span>
+            <span style={{fontSize:11,color:mv?"#64748b":"#f87171"}}>📅 <span style={{color:mv?"#94a3b8":"#f87171"}}>{mv?(cw.length+" weeks · "+activeDays+" active days · "+perDay+"/day = "+maxSlots+" slots"):"Enter month"}</span></span>
+            <span style={{fontSize:11,color:"#64748b"}}>✅ <span style={{color:"#4ade80"}}>{covered} covered</span>{filtered.length>maxSlots&&<span style={{color:"#fb923c"}}> · {filtered.length-maxSlots} overflow</span>}</span>
+          </div>
+
+          <div style={{display:"flex",justifyContent:"flex-end"}}>
+            <button style={{...S.btn,padding:"10px 24px",fontSize:14,opacity:mv?1:0.45}} disabled={!mv}
+              onClick={function(){props.onBuild(filtered,perDay,visitMins,month,clusterMode,radiusKm,cw,Object.keys(blocked),monthIndex,storeAvailability);}}>
+              🚀 Build Plan ({covered} stores)
+            </button>
+          </div>
+        </div>
+
+        <div style={S.card}>
+          <div style={S.label}>Block days — annual leave & unavailable</div>
+          <div style={{fontSize:10,color:"#475569",marginBottom:12}}>Click a day to block it. Click Wk# to block the whole week. Blocked days are skipped — stores fill remaining days.</div>
+          {mv && cw ? (
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {cw.map(function(week,wi){
+                var allBlocked=week.every(function(d){return blocked[d.dateKey];});
+                return (
+                  <div key={wi} style={{display:"flex",gap:4,alignItems:"center"}}>
+                    <button onClick={function(){toggleWeek(week);}} style={{fontSize:9,fontWeight:800,color:allBlocked?"#f87171":"#475569",background:allBlocked?"#2a1010":"#0a111a",border:"1px solid "+(allBlocked?"#7f1d1d":"#1e293b"),borderRadius:5,padding:"4px 7px",cursor:"pointer",flexShrink:0,minWidth:38,textAlign:"center"}}>Wk{wi+1}</button>
+                    {week.map(function(day){
+                      var isB=!!blocked[day.dateKey];
+                      return (
+                        <button key={day.dateKey} onClick={function(){toggleDay(day.dateKey);}} style={{flex:1,fontSize:9,fontWeight:700,color:isB?"#f87171":"#94a3b8",background:isB?"#2a1010":"#0d1825",border:"1px solid "+(isB?"#7f1d1d":"#1e293b"),borderRadius:5,padding:"6px 2px",cursor:"pointer",textAlign:"center",transition:"all .1s"}}>
+                          <div>{day.dayName.slice(0,3)}</div>
+                          <div style={{fontSize:8,opacity:.8,marginTop:1}}>{day.date.getDate()}/{day.date.getMonth()+1}</div>
+                          {isB && <div style={{fontSize:8,marginTop:1}}>🚫</div>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          ) : <div style={{color:"#334155",fontSize:12,padding:"30px 0",textAlign:"center"}}>Enter a valid month to see the calendar</div>}
+        </div>
+      </div>
+
+      <div style={{display:"flex",gap:8,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search stores…" style={{...S.input,flex:1,minWidth:180,boxSizing:"border-box"}}/>
+        {Object.keys(overrides).length > 0 && (
+          <button onClick={function(){setOverrides({});}} style={{...S.ghost,fontSize:11,padding:"6px 12px",flexShrink:0}}>
+            Clear {Object.keys(overrides).length} override{Object.keys(overrides).length!==1?"s":""}
+          </button>
+        )}
+      </div>
+      <div style={{...S.card,padding:0,overflow:"hidden"}}>
+        <div style={{background:"#0a111a",padding:"7px 12px",borderBottom:"1px solid #1e293b",fontSize:9,color:"#475569"}}>
+          A + B stores are locked in every month · C + D rotate in halves · <span style={{color:"#4ade80",fontWeight:700}}>+ Include</span> forces a C/D store in · <span style={{color:"#f87171",fontWeight:700}}>Unlock</span> temporarily removes an A/B store
+        </div>
+        <div style={{maxHeight:320,overflowY:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead style={{position:"sticky",top:0,zIndex:2}}>
+              <tr>{["Code","Store Name","Postcode","Tier","Status","Override"].map(function(h){return <th key={h} style={{background:"#0a111a",color:"#334155",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:1,padding:"7px 10px",textAlign:"left",borderBottom:"1px solid #1e293b"}}>{h}</th>;})}</tr>
+            </thead>
+            <tbody>
+              {props.stores.filter(function(s){
+                if(search){var q=search.toLowerCase();return s.name.toLowerCase().indexOf(q)>=0||s.postcode.toLowerCase().indexOf(q)>=0||s.code.toLowerCase().indexOf(q)>=0;}
+                return true;
+              }).map(function(s,i){
+                var inBaseRotation = rotated.some(function(r){return r.id===s.id;});
+                var ov = overrides[s.id];
+                var inPlan = afterOverrides.some(function(r){return r.id===s.id;}) && tierFilter[s.tier];
+                var isLocked = s.tier === "A" || s.tier === "B";
+                var statusText = ov==="exclude" ? (isLocked?"Unlocked this month":"Skipped") : ov==="include" ? "Force included" : isLocked ? "Locked monthly" : inBaseRotation ? "In rotation" : "Next month";
+                var statusColor = ov==="exclude" ? "#f87171" : ov==="include" ? "#4ade80" : isLocked ? (s.tier==="A"?"#4ade80":"#60a5fa") : inBaseRotation ? "#94a3b8" : "#475569";
+                var rowBg = ov==="include" ? "#0d2a1a" : ov==="exclude" ? "#2a1010" : inBaseRotation ? (i%2===0?"#131f2e":"#0d1825") : (i%2===0?"#131f2e":"#0d1825");
+                return (
+                  <tr key={s.id} style={{borderBottom:"1px solid #0f1923",background:rowBg,opacity:(inBaseRotation||ov==="include")?1:0.5}}>
+                    <td style={{padding:"5px 10px",fontSize:10,fontFamily:"monospace",color:"#64748b"}}>{s.code}</td>
+                    <td style={{padding:"5px 10px",fontSize:11,color:"#e2e8f0"}}>{s.name}</td>
+                    <td style={{padding:"5px 10px",fontSize:10,fontFamily:"monospace",color:"#94a3b8"}}>{s.postcode}</td>
+                    <td style={{padding:"5px 10px"}}><TierBadge tier={s.tier}/></td>
+                    <td style={{padding:"5px 10px",fontSize:10,color:statusColor,fontWeight:ov?700:400}}>{statusText}</td>
+                    <td style={{padding:"5px 10px"}}>
+                      <div style={{display:"flex",gap:4}}>
+                        {(s.tier === "A" || s.tier === "B") ? (
+                          <span style={{fontSize:9,color:s.tier==="A"?"#4ade80":"#60a5fa",padding:"2px 7px",border:"1px solid "+(s.tier==="A"?"#16a34a":"#2563eb"),borderRadius:4,background:s.tier==="A"?"#0d4f2e":"#1e3a5f"}}>✓ Monthly</span>
+                        ) : (
+                          <button
+                            onClick={function(){toggleOverride(s.id,"include");}}
+                            style={{background:ov==="include"?"#16a34a":"#0a111a",border:"1px solid "+(ov==="include"?"#16a34a":"#1e293b"),color:ov==="include"?"#fff":"#4ade80",borderRadius:4,padding:"2px 7px",fontSize:9,fontWeight:700,cursor:"pointer"}}>
+                            + Include
+                          </button>
+                        )}
+                        {(s.tier === "A" || s.tier === "B") ? (
+                          <button
+                            onClick={function(){toggleOverride(s.id,"exclude");}}
+                            style={{background:ov==="exclude"?"#991b1b":"#0a111a",border:"1px solid "+(ov==="exclude"?"#991b1b":"#1e293b"),color:ov==="exclude"?"#fff":"#f87171",borderRadius:4,padding:"2px 7px",fontSize:9,fontWeight:700,cursor:"pointer"}}>
+                            {ov==="exclude"?"↩ Re-lock":"🔓 Unlock"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={function(){toggleOverride(s.id,"exclude");}}
+                            style={{background:ov==="exclude"?"#991b1b":"#0a111a",border:"1px solid "+(ov==="exclude"?"#991b1b":"#1e293b"),color:ov==="exclude"?"#fff":"#f87171",borderRadius:4,padding:"2px 7px",fontSize:9,fontWeight:700,cursor:"pointer"}}>
+                            {ov==="exclude"?"↩ Re-add":"– Skip"}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style={{fontSize:10,color:"#475569",marginTop:5,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:4}}>
+        <span>
+          {Object.values(overrides).filter(function(v){return v==="include";}).length > 0 && <span style={{color:"#4ade80"}}>+{Object.values(overrides).filter(function(v){return v==="include";}).length} forced in · </span>}
+          {Object.values(overrides).filter(function(v){return v==="exclude";}).length > 0 && <span style={{color:"#f87171"}}>–{Object.values(overrides).filter(function(v){return v==="exclude";}).length} skipped · </span>}
+          {filtered.length} in plan this month
+        </span>
+        <span>{props.stores.length - afterOverrides.length + Object.values(overrides).filter(function(v){return v==="exclude";}).length} deferred to next month</span>
+      </div>
+
+      {/* ── AVAILABILITY MANAGER ──────────────────────────────────────────── */}
+      <AvailabilityManager
+        stores={props.stores}
+        storeAvailability={storeAvailability}
+        onUpdate={function(id, days) {
+          var next = Object.assign({}, storeAvailability);
+          if (days.length === 0) { delete next[id]; } else { next[id] = { availDays: days }; }
+          if (props.onUpdateAvailability) props.onUpdateAvailability(next);
+        }}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 3 — PLAN VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+function StepPlan(props) {
+  const [plan, setPlan] = useState(props.monthPlan);
+  const [visitMeta, setVisitMeta] = useState({});
+  const [notesOpen, setNotesOpen] = useState(null);
+  const [activeWeek, setActiveWeek] = useState(1);
+  const [exporting, setExporting] = useState(false);
+  const [showCopy, setShowCopy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showNotVisiting, setShowNotVisiting] = useState(false);
+  const [copiedNV, setCopiedNV] = useState(false);
+
+  var hc = getCoords(props.homePostcode);
+  var hLat = hc[0], hLng = hc[1];
+  var allVisits = plan.reduce(function(a,w){return a.concat(w.days.reduce(function(b,d){return b.concat(d.slots);},[]));}, []);
+  var tc = ["A","B","C","D"].reduce(function(a,t){a[t]=allVisits.filter(function(s){return s.tier===t;}).length;return a;},{});
+  var currentWeek = plan.find(function(w){return w.week===activeWeek;});
+
+  function removeVisit(weekNum, dayIdx, sid) {
+    setPlan(function(prev){
+      return prev.map(function(w){
+        if(w.week!==weekNum) return w;
+        return Object.assign({},w,{days:w.days.map(function(d,di){
+          if(di!==dayIdx) return d;
+          return Object.assign({},d,{slots:d.slots.filter(function(s){return s.id!==sid;})});
+        })});
+      });
+    });
+  }
+
+  function handleExport() {
+    setExporting(true);
+    exportToExcel(plan, props.repName, props.month).catch(function(){setShowCopy(true);}).finally(function(){setExporting(false);});
+  }
+
+  function handleCopy() {
+    var text = buildCopyText(plan, props.month);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(function(){setCopied(true);setTimeout(function(){setCopied(false);},2500);});
+    }
+  }
+
+  var copyText = buildCopyText(plan, props.month);
+
+  // Build not-visiting list — all uploaded stores not in the current plan
+  var visitedPostcodes = {};
+  for (var vi = 0; vi < allVisits.length; vi++) {
+    visitedPostcodes[allVisits[vi].postcode.toUpperCase().replace(/\s+/g,"")] = true;
+  }
+  var notVisiting = (props.allStores || []).filter(function(s) {
+    return !visitedPostcodes[s.postcode.toUpperCase().replace(/\s+/g,"")];
+  });
+
+  function buildNotVisitingText() {
+    var rows = [["Store Code","Store Name","Postcode","Tier"].join("\t")];
+    for (var i = 0; i < notVisiting.length; i++) {
+      var s = notVisiting[i];
+      rows.push([s.code, s.name, s.postcode, s.tier].join("\t"));
+    }
+    return rows.join("\n");
+  }
+
+  function handleCopyNotVisiting() {
+    var text = buildNotVisitingText();
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(function(){setCopiedNV(true);setTimeout(function(){setCopiedNV(false);},2500);});
+    }
+  }
+
+  return (
+    <div style={{maxWidth:1000,margin:"0 auto"}}>
+      {notesOpen && <NotesModal store={notesOpen}
+        meta={Object.assign({}, visitMeta[notesOpen.id]||{}, props.storeAvailability ? {availDays:(props.storeAvailability[notesOpen.id]||{}).availDays||[]} : {})}
+        onSave={function(d){
+          setVisitMeta(function(p){return Object.assign({},p,{[notesOpen.id]:d});});
+          // Save availability separately to App-level state so it persists across plan rebuilds
+          if (props.onUpdateAvailability) props.onUpdateAvailability(notesOpen.id, {availDays: d.availDays||[]});
+          setNotesOpen(null);
+        }}
+        onClose={function(){setNotesOpen(null);}}/>}
+
+      <div style={{...S.card,marginBottom:14,display:"flex",alignItems:"center",flexWrap:"wrap",gap:12,justifyContent:"space-between"}}>
+        <div>
+          <div style={{fontSize:15,fontWeight:800,color:"#e2e8f0"}}>{props.repName} — {props.month}</div>
+          <div style={{fontSize:11,color:"#64748b",marginTop:2}}>🏠 {props.homePostcode} · {plan.length} week{plan.length!==1?"s":""} · {allVisits.length} visits · {props.visitMins} min/visit · zone-committed arc routing</div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          {["A","B","C","D"].map(function(t){if(!tc[t])return null;var c=TC[t];return <span key={t} style={{background:c.bg,color:c.text,border:"1px solid "+c.border,borderRadius:5,padding:"3px 10px",fontSize:11,fontWeight:700}}>{t}×{tc[t]}</span>;})}
+          <button style={{...S.btn,opacity:exporting?0.6:1,padding:"7px 14px",fontSize:12}} disabled={exporting} onClick={handleExport}>{exporting?"⏳...":"⬇ Excel"}</button>
+          <button style={{...S.ghost,padding:"7px 14px",fontSize:12,background:showCopy?"#1e293b":"transparent"}} onClick={function(){setShowCopy(function(o){return !o;setShowNotVisiting(false);});}}>{showCopy?"✕ Close Copy":"📋 Copy"}</button>
+          <button style={{...S.ghost,padding:"7px 14px",fontSize:12,background:showNotVisiting?"#1e293b":"transparent",borderColor:showNotVisiting?"#ea580c":"#1e293b",color:showNotVisiting?"#fb923c":"#94a3b8"}} onClick={function(){setShowNotVisiting(function(o){return !o;});setShowCopy(false);}}>{showNotVisiting?"✕ Close":"📞 Not Visiting"}</button>
+          <button style={{...S.ghost,padding:"7px 14px",fontSize:12}} onClick={function(){if(window.confirm("Go back to settings? Your current plan will be cleared."))props.onBack();}}>← Change</button>
+        </div>
+      </div>
+
+      {showNotVisiting && (
+        <div style={{...S.card,marginBottom:14,border:"1px solid #ea580c"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:8}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>📞 Telesales — Not Visiting This Month</div>
+              <div style={{fontSize:10,color:"#64748b",marginTop:2}}>{notVisiting.length} stores not on your route this month · copy and send to your telesales team</div>
+            </div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <button style={{...S.btn,background:copiedNV?"#16a34a":"#7c2d12",borderColor:copiedNV?"#16a34a":"#ea580c"}} onClick={handleCopyNotVisiting}>{copiedNV?"✓ Copied!":"📋 Copy List"}</button>
+              <button onClick={function(){setShowNotVisiting(false);}} style={{background:"#1e293b",border:"1px solid #334155",color:"#94a3b8",borderRadius:7,padding:"7px 12px",fontWeight:700,fontSize:12,cursor:"pointer"}}>✕ Close</button>
+            </div>
+          </div>
+          {notVisiting.length === 0 ? (
+            <div style={{padding:"14px",textAlign:"center",color:"#4ade80",fontSize:12}}>✓ All stores are scheduled this month</div>
+          ) : (
+            <div style={{maxHeight:320,overflowY:"auto",border:"1px solid #1e293b",borderRadius:7,overflow:"hidden"}}>
+              <table style={{width:"100%",borderCollapse:"collapse"}}>
+                <thead style={{position:"sticky",top:0,zIndex:2}}>
+                  <tr>{["Store Code","Store Name","Postcode","Tier"].map(function(h){return <th key={h} style={{background:"#0a111a",color:"#334155",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:1,padding:"7px 12px",textAlign:"left",borderBottom:"1px solid #1e293b"}}>{h}</th>;})}</tr>
+                </thead>
+                <tbody>
+                  {notVisiting.map(function(s,i){
+                    var c = TC[s.tier]||TC.C;
+                    return (
+                      <tr key={s.id} style={{borderBottom:"1px solid #0f1923",background:i%2===0?"#131f2e":"#0d1825"}}>
+                        <td style={{padding:"6px 12px",fontSize:10,fontFamily:"monospace",color:"#64748b"}}>{s.code}</td>
+                        <td style={{padding:"6px 12px",fontSize:12,color:"#e2e8f0"}}>{s.name}</td>
+                        <td style={{padding:"6px 12px",fontSize:10,fontFamily:"monospace",color:"#94a3b8"}}>{s.postcode}</td>
+                        <td style={{padding:"6px 12px"}}><TierBadge tier={s.tier}/></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8,flexWrap:"wrap",gap:8}}>
+            <div style={{fontSize:10,color:"#475569"}}>
+              👆 Click the box · <strong style={{color:"#94a3b8"}}>Ctrl+A</strong> · <strong style={{color:"#94a3b8"}}>Ctrl+C</strong> — or use the Copy List button above
+            </div>
+            <button onClick={function(){setShowNotVisiting(false);}} style={{fontSize:10,color:"#64748b",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Done — close this panel</button>
+          </div>
+          <textarea readOnly value={buildNotVisitingText()} onClick={function(e){e.target.select();}} onFocus={function(e){e.target.select();}}
+            style={{...S.ta,minHeight:120,fontSize:10,cursor:"text",marginTop:10}}/>
+        </div>
+      )}
+
+      {showCopy && (
+        <div style={{...S.card,marginBottom:14,border:"1px solid #2563eb"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:8}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>📋 Copy & Paste into Excel</div>
+              <div style={{fontSize:10,color:"#64748b",marginTop:2}}>Month · Week · Day · Code · Store · Postcode · Tier — tab separated</div>
+            </div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <button style={{...S.btn,background:copied?"#16a34a":undefined}} onClick={handleCopy}>{copied?"✓ Copied!":"📋 Copy All"}</button>
+              <button onClick={function(){setShowCopy(false);}} style={{background:"#1e293b",border:"1px solid #334155",color:"#94a3b8",borderRadius:7,padding:"7px 12px",fontWeight:700,fontSize:12,cursor:"pointer"}} title="Close copy panel">✕ Close</button>
+            </div>
+          </div>
+          <textarea readOnly value={copyText} id="copy-ta"
+            onClick={function(e){e.target.select();}}
+            onFocus={function(e){e.target.select();}}
+            style={{...S.ta,minHeight:220,fontSize:10,cursor:"text"}}/>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8,flexWrap:"wrap",gap:8}}>
+            <div style={{fontSize:10,color:"#475569"}}>
+              👆 Click the box · <strong style={{color:"#94a3b8"}}>Ctrl+A</strong> · <strong style={{color:"#94a3b8"}}>Ctrl+C</strong> to copy all
+            </div>
+            <button onClick={function(){setShowCopy(false);}} style={{fontSize:10,color:"#64748b",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Done — close this panel</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+        {plan.map(function(w){
+          var wv=w.days.reduce(function(n,d){return n+d.slots.length;},0);
+          var hb=w.days.some(function(d){return d.blocked;});
+          var isA=activeWeek===w.week;
+          return (
+            <button key={w.week} onClick={function(){setActiveWeek(w.week);}} style={{flex:1,minWidth:80,background:isA?"#1e3a5f":"#0a111a",border:"2px solid "+(isA?"#2563eb":"#1e293b"),color:isA?"#60a5fa":"#64748b",borderRadius:8,padding:"8px 10px",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>Week {w.week}{hb&&<span style={{fontSize:9}}>🚫</span>}</div>
+              <div style={{fontSize:10,fontWeight:400,opacity:.7,marginTop:2}}>{wv} visit{wv!==1?"s":""}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {currentWeek && (
+        <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.max(currentWeek.days.length,1)+",1fr)",gap:5,marginBottom:12}}>
+          {currentWeek.days.map(function(day,di){
+            var aC=day.slots.filter(function(s){return s.tier==="A";}).length;
+            var bC=day.slots.filter(function(s){return s.tier==="B";}).length;
+            return (
+              <div key={di} style={{background:day.blocked?"#1a1010":"#0d1825",border:"1px solid "+(day.blocked?"#4a1010":"#1e293b"),borderRadius:7,padding:"8px 6px",textAlign:"center"}}>
+                <div style={{fontSize:10,fontWeight:700,color:day.blocked?"#f87171":"#38bdf8",marginBottom:2}}>{(day.dateLabel||day.dayName).split(" ").slice(0,2).join(" ")}</div>
+                {day.blocked ? <div style={{fontSize:11}}>🚫</div> : (
+                  <>
+                    <div style={{fontSize:15,fontWeight:800,color:"#e2e8f0",marginBottom:2}}>{day.slots.length}</div>
+                    <div style={{display:"flex",gap:2,justifyContent:"center"}}>
+                      {aC>0&&<span style={{background:TC.A.bg,color:TC.A.text,borderRadius:3,fontSize:8,fontWeight:700,padding:"0 3px"}}>A{aC}</span>}
+                      {bC>0&&<span style={{background:TC.B.bg,color:TC.B.text,borderRadius:3,fontSize:8,fontWeight:700,padding:"0 3px"}}>B{bC}</span>}
+                    </div>
+                    {day.backTime&&<div style={{fontSize:7,color:"#334155",marginTop:2}}>back {day.backTime}</div>}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {currentWeek && (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {currentWeek.days.map(function(day,di){
+            // Merge App-level availability into visitMeta so DayCard can show warnings
+            var mergedMeta = {};
+            for (var mk in visitMeta) { mergedMeta[mk] = Object.assign({}, visitMeta[mk]); }
+            var sa2 = props.storeAvailability || {};
+            for (var sk in sa2) {
+              if (!mergedMeta[sk]) mergedMeta[sk] = {};
+              mergedMeta[sk].availDays = sa2[sk].availDays || [];
+            }
+            return <DayCard key={di} day={day} homePostcode={props.homePostcode} homeLat={hLat} homeLng={hLng} visitMeta={mergedMeta} onNote={function(s){setNotesOpen(s);}} onRemove={function(sid){removeVisit(activeWeek,di,sid);}}/>;
+          })}
+        </div>
+      )}
+
+      <div style={{marginTop:22}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Full Month Overview</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:5}}>
+          {plan.map(function(w){return w.days.map(function(day,di){
+            var isC=w.week===activeWeek;
+            var aC=day.slots.filter(function(s){return s.tier==="A";}).length;
+            var bC=day.slots.filter(function(s){return s.tier==="B";}).length;
+            return (
+              <div key={w.week+"-"+di} onClick={function(){setActiveWeek(w.week);}} style={{background:day.blocked?"#1a1010":isC?"#131f2e":"#0d1825",border:"1px solid "+(day.blocked?"#4a1010":isC?"#2563eb":"#1e293b"),borderRadius:7,padding:"7px 9px",cursor:"pointer"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+                  <span style={{fontSize:10,fontWeight:700,color:day.blocked?"#f87171":isC?"#60a5fa":"#64748b"}}>Wk{w.week} {(day.dateLabel||day.dayName).split(" ").slice(0,2).join(" ")}</span>
+                  <span style={{fontSize:10,color:"#475569"}}>{day.blocked?"🚫":day.slots.length}</span>
+                </div>
+                {!day.blocked&&<div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
+                  {aC>0&&<span style={{background:TC.A.bg,color:TC.A.text,borderRadius:3,fontSize:8,fontWeight:700,padding:"0 3px"}}>A{aC}</span>}
+                  {bC>0&&<span style={{background:TC.B.bg,color:TC.B.text,borderRadius:3,fontSize:8,fontWeight:700,padding:"0 3px"}}>B{bC}</span>}
+                </div>}
+              </div>
+            );
+          });})}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROOT APP
+// ─────────────────────────────────────────────────────────────────────────────
+function App() {
+  const [step, setStep] = useState(1);
+  const [stores, setStores] = useState([]);
+  const [homePostcode, setHomePostcode] = useState("EN2 8QH");
+  const [repName, setRepName] = useState("My Territory");
+  const [monthPlan, setMonthPlan] = useState(null);
+  const [visitMins, setVisitMins] = useState(25);
+  const [month, setMonth] = useState("");
+  const [storeAvailability, setStoreAvailability] = useState({}); // id -> {availDays:[...]}
+  const [saveStatus, setSaveStatus] = useState(""); // "saving" | "saved" | "error" | ""
+  const [hasSaved, setHasSaved] = useState(false);
+  const [loadingState, setLoadingState] = useState(true); // true while checking storage on mount
+
+  // ── LOAD SAVED SESSION ON MOUNT ────────────────────────────────────────────
+  // Using useRef to run once — avoids useEffect cleanup issues
+  const didLoad = useRef(false);
+  if (!didLoad.current) {
+    didLoad.current = true;
+    if (typeof window !== "undefined" && window.storage) {
+      window.storage.get("journey-planner-session").then(function(result) {
+        if (result && result.value) {
+          try {
+            var saved = JSON.parse(result.value);
+            if (saved.stores && saved.stores.length > 0) {
+              setStores(saved.stores);
+              setHomePostcode(saved.homePostcode || "EN2 8QH");
+              setRepName(saved.repName || "My Territory");
+              setHasSaved(true);
+              setStep(2); // jump straight to configure
+            }
+          } catch(e) {}
+        }
+        setLoadingState(false);
+      }).catch(function() { setLoadingState(false); });
+    } else {
+      setLoadingState(false);
+    }
+  }
+
+  // ── SAVE SESSION ───────────────────────────────────────────────────────────
+  function saveSession(s, home, name) {
+    if (!window.storage) return;
+    setSaveStatus("saving");
+    var data = JSON.stringify({ stores: s, homePostcode: home, repName: name, savedAt: new Date().toISOString() });
+    window.storage.set("journey-planner-session", data).then(function() {
+      setSaveStatus("saved");
+      setHasSaved(true);
+      setTimeout(function() { setSaveStatus(""); }, 2500);
+    }).catch(function() {
+      setSaveStatus("error");
+      setTimeout(function() { setSaveStatus(""); }, 3000);
+    });
+  }
+
+  function clearSession() {
+    if (!window.storage) return;
+    window.storage.delete("journey-planner-session").then(function() {
+      setHasSaved(false);
+      setStores([]);
+      setHomePostcode("EN2 8QH");
+      setRepName("My Territory");
+      setMonthPlan(null);
+      setStep(1);
+    });
+  }
+
+  function handleLoaded(s, home, name) {
+    setStores(s);
+    setHomePostcode(home);
+    setRepName(name);
+    setStep(2);
+    saveSession(s, home, name);
+  }
+
+  function handleBuild(filtered, perDay, vMins, m, clusterMode, radiusKm, calendarWeeks, blockedDates, monthIndex, storeAvail) {
+    setVisitMins(vMins); setMonth(m);
+    var coords = getCoords(homePostcode);
+    var plan = buildMonthPlan(filtered, perDay, vMins, coords[0], coords[1], clusterMode, radiusKm, calendarWeeks, blockedDates, monthIndex, storeAvail);
+    setMonthPlan(plan); setStep(3);
+  }
+
+  // Show loading screen while checking storage
+  if (loadingState) {
+    return (
+      <div style={{minHeight:"100vh",background:"#0F1923",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
+        <span style={{fontSize:32}}>🗺</span>
+        <div style={{fontSize:13,color:"#64748b"}}>Loading your saved session…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{minHeight:"100vh",background:"#0F1923",fontFamily:"'DM Sans','Segoe UI',system-ui,sans-serif",color:"#e2e8f0"}}>
+      <div style={{background:"#0a111a",borderBottom:"1px solid #1e293b",padding:"10px 18px",position:"sticky",top:0,zIndex:100}}>
+        <div style={{maxWidth:1000,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:20}}>🗺</span>
+            <div>
+              <div style={{fontSize:13,fontWeight:800,color:"#e2e8f0"}}>Territory Journey Planner</div>
+              <div style={{fontSize:9,color:"#475569"}}>Zone-committed · Arc routing · Soft landing · Tier rotation</div>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {saveStatus==="saving" && <span style={{fontSize:10,color:"#64748b"}}>💾 Saving…</span>}
+            {saveStatus==="saved" && <span style={{fontSize:10,color:"#4ade80"}}>✓ Saved</span>}
+            {saveStatus==="error" && <span style={{fontSize:10,color:"#f87171"}}>⚠ Save failed</span>}
+            {hasSaved && !saveStatus && <span style={{fontSize:10,color:"#334155"}}>💾 Auto-saved</span>}
+            {hasSaved && (
+              <button onClick={clearSession} style={{fontSize:9,color:"#475569",background:"none",border:"1px solid #1e293b",borderRadius:5,padding:"3px 8px",cursor:"pointer"}}>
+                Clear saved data
+              </button>
+            )}
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {[{n:1,l:"Upload"},{n:2,l:"Configure"},{n:3,l:"Plan"}].map(function(item){return(
+                <div key={item.n} style={{display:"flex",alignItems:"center",gap:4,opacity:step===item.n?1:step>item.n?.65:.3,cursor:step>item.n?"pointer":"default"}} onClick={function(){if(step>item.n)setStep(item.n);}}>
+                  <div style={{width:22,height:22,borderRadius:"50%",background:step>=item.n?"#38bdf8":"#1e293b",color:step>=item.n?"#0f1923":"#475569",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{item.n}</div>
+                  <span style={{fontSize:11,color:step===item.n?"#94a3b8":"#475569"}}>{item.l}</span>
+                </div>
+              );})}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style={{padding:"24px 16px"}}>
+        {step===1 && <StepUpload onLoaded={handleLoaded}/>}
+        {step===2 && <StepConfigure stores={stores} homePostcode={homePostcode} repName={repName} storeAvailability={storeAvailability} onUpdateAvailability={function(next){setStoreAvailability(next);}} onBack={function(){setStep(1);}} onBuild={handleBuild}/>}
+        {step===3 && monthPlan && <StepPlan monthPlan={monthPlan} homePostcode={homePostcode} repName={repName} visitMins={visitMins} month={month} allStores={stores} storeAvailability={storeAvailability} onUpdateAvailability={function(id,avail){setStoreAvailability(function(p){return Object.assign({},p,{[id]:avail});});}} onBack={function(){setStep(2);}}/>}
+      </div>
+    </div>
+  );
+}
+
+var S = {
+  btn: {background:"#0369a1",border:"1px solid #0284c7",color:"#e0f2fe",borderRadius:7,padding:"8px 18px",fontWeight:700,fontSize:13,cursor:"pointer"},
+  ghost: {background:"transparent",border:"1px solid #1e293b",color:"#94a3b8",borderRadius:7,padding:"8px 14px",fontWeight:600,fontSize:13,cursor:"pointer"},
+  label: {fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.8,marginBottom:6,display:"block"},
+  card: {background:"#131f2e",border:"1px solid #1e293b",borderRadius:10,padding:16},
+  input: {background:"#0a111a",border:"1px solid #1e293b",borderRadius:6,color:"#e2e8f0",padding:"8px 12px",fontSize:13,outline:"none"},
+  ta: {width:"100%",background:"#0a111a",border:"1px solid #1e293b",borderRadius:7,color:"#e2e8f0",padding:10,fontSize:12,fontFamily:"monospace",resize:"vertical",outline:"none",boxSizing:"border-box",lineHeight:1.6},
+};
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
