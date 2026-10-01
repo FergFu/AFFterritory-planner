@@ -3,15 +3,74 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Territory Journey Planner</title>
-  <style>* { box-sizing: border-box; margin: 0; padding: 0; } body { background: #0F1923; color: #e2e8f0; font-family: Segoe UI, system-ui, sans-serif; } #root { min-height: 100vh; }</style>
+  <title>MyPatch — Territory Journey Planner</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0F1923; color: #e2e8f0; font-family: Segoe UI, system-ui, sans-serif; }
+    #root { min-height: 100vh; }
+    #loading {
+      position: fixed; inset: 0; background: #0F1923;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; z-index: 9999;
+    }
+    #loading .spinner {
+      width: 40px; height: 40px; border: 3px solid #1e293b;
+      border-top-color: #38bdf8; border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { font-size: 13px; color: #64748b; }
+    #loading h2 { font-size: 20px; font-weight: 800; color: #e2e8f0; }
+    #error {
+      display: none; position: fixed; inset: 0; background: #0F1923;
+      align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+    }
+    #error h2 { color: #f87171; font-size: 18px; }
+    #error p { color: #64748b; font-size: 13px; max-width: 400px; text-align: center; }
+    #error button { background: #0369a1; color: #e0f2fe; border: none; border-radius: 7px; padding: 10px 20px; font-size: 13px; cursor: pointer; }
+  </style>
 </head>
 <body>
+  <div id="loading">
+    <span style="font-size:40px">🗺</span>
+    <h2>MyPatch</h2>
+    <div class="spinner"></div>
+    <p>Loading Territory Journey Planner...</p>
+  </div>
+  <div id="error">
+    <span style="font-size:40px">⚠️</span>
+    <h2>Something went wrong</h2>
+    <p>Please try refreshing the page. If the problem continues, try opening in Chrome or Safari.</p>
+    <button onclick="location.reload()">Refresh</button>
+  </div>
   <div id="root"></div>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script type="text/babel">
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+
+  <script>
+    // Hide loading screen once app mounts, show error if it fails
+    window.__appMounted = function() {
+      var el = document.getElementById("loading");
+      if (el) el.style.display = "none";
+    };
+    window.onerror = function(msg, src, line, col, err) {
+      document.getElementById("loading").style.display = "none";
+      document.getElementById("error").style.display = "flex";
+      console.error("App error:", msg, err);
+    };
+    // Fallback: if not mounted after 15s, show error
+    setTimeout(function() {
+      var loading = document.getElementById("loading");
+      if (loading && loading.style.display !== "none") {
+        loading.style.display = "none";
+        document.getElementById("error").style.display = "flex";
+      }
+    }, 15000);
+  </script>
+
+  <script type="text/babel" data-presets="react">
 const { useState, useRef } = React;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2058,8 +2117,16 @@ var S = {
   ta: {width:"100%",background:"#0a111a",border:"1px solid #1e293b",borderRadius:7,color:"#e2e8f0",padding:10,fontSize:12,fontFamily:"monospace",resize:"vertical",outline:"none",boxSizing:"border-box",lineHeight:1.6},
 };
 
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<App />);
+
+    try {
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(React.createElement(App));
+      window.__appMounted();
+    } catch(e) {
+      document.getElementById("loading").style.display = "none";
+      document.getElementById("error").style.display = "flex";
+      console.error("Mount error:", e);
+    }
   </script>
 </body>
 </html>
